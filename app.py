@@ -3,14 +3,16 @@ import pandas as pd
 import numpy as np
 import requests
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 # ============================================================
-# PAGE CONFIG
+# AI MARKET INTELLIGENCE v4.2
+# CoinGecko crypto data + Yahoo Finance + Binance fallback
+# Read-only / paper-analysis dashboard
 # ============================================================
 
 st.set_page_config(
-    page_title="AI Market Intelligence v4.1",
+    page_title="AI Market Intelligence v4.2",
     page_icon="🤖",
     layout="wide",
 )
@@ -19,7 +21,10 @@ st.set_page_config(
 # CONFIG
 # ============================================================
 
-COINCAP_BASE = "https://rest.coincap.io/v3"
+COINGECKO_PUBLIC_BASE = "https://api.coingecko.com/api/v3"
+COINGECKO_DEMO_BASE = "https://api.coingecko.com/api/v3"
+COINGECKO_PRO_BASE = "https://pro-api.coingecko.com/api/v3"
+
 YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 BINANCE_BASE = "https://api.binance.com/api/v3"
 
@@ -66,8 +71,8 @@ CRYPTO = {
     "BTCUSDT": ("Bitcoin", "bitcoin"),
     "ETHUSDT": ("Ethereum", "ethereum"),
     "SOLUSDT": ("Solana", "solana"),
-    "BNBUSDT": ("BNB", "binance-coin"),
-    "XRPUSDT": ("XRP", "xrp"),
+    "BNBUSDT": ("BNB", "binancecoin"),
+    "XRPUSDT": ("XRP", "ripple"),
     "DOGEUSDT": ("Dogecoin", "dogecoin"),
     "LINKUSDT": ("Chainlink", "chainlink"),
     "AVAXUSDT": ("Avalanche", "avalanche"),
@@ -97,6 +102,7 @@ BASE_SCORE = {
     "LGELECTRONICSUSDT": 63,
     "NAVERUSDT": 58,
     "KODEX200USDT": 55,
+
     "BTCUSDT": 60,
     "ETHUSDT": 60,
     "SOLUSDT": 57,
@@ -105,6 +111,7 @@ BASE_SCORE = {
     "DOGEUSDT": 50,
     "LINKUSDT": 57,
     "AVAXUSDT": 54,
+
     "NVDA": 67,
     "AMD": 61,
     "AVGO": 65,
@@ -114,6 +121,7 @@ BASE_SCORE = {
     "META": 61,
     "TSLA": 52,
     "AAPL": 59,
+
     "QQQ": 58,
     "SPY": 57,
 }
@@ -129,10 +137,21 @@ def get_secret(name, default=""):
         return os.getenv(name, default)
 
 
-SUPABASE_URL = get_secret("SUPABASE_URL").rstrip("/")
-SUPABASE_KEY = get_secret("SUPABASE_KEY")
-COINCAP_TOKEN = get_secret("COINCAP_TOKEN")
+SUPABASE_URL = get_secret(
+    "SUPABASE_URL"
+).rstrip("/")
 
+SUPABASE_KEY = get_secret(
+    "SUPABASE_KEY"
+)
+
+COINGECKO_DEMO_API_KEY = get_secret(
+    "COINGECKO_DEMO_API_KEY"
+)
+
+COINGECKO_PRO_API_KEY = get_secret(
+    "COINGECKO_PRO_API_KEY"
+)
 
 # ============================================================
 # SESSION STATE
@@ -143,7 +162,6 @@ if "api_diagnostics" not in st.session_state:
 
 if "custom_assets" not in st.session_state:
     st.session_state.custom_assets = []
-
 
 # ============================================================
 # API DIAGNOSTICS
@@ -165,14 +183,23 @@ def record_api_diagnostic(
         "time_utc": datetime.now(
             timezone.utc
         ).strftime("%Y-%m-%d %H:%M:%S"),
+
         "service": service,
+
         "http_status": status_code,
-        "status": "OK" if ok else "ERROR",
+
+        "status": (
+            "OK"
+            if ok
+            else "ERROR"
+        ),
+
         "endpoint": endpoint,
+
         "message": message,
+
         "response": str(response)[:500],
     })
-
 
 # ============================================================
 # SUPABASE
@@ -180,14 +207,17 @@ def record_api_diagnostic(
 
 def supabase_ready():
     return bool(
-        SUPABASE_URL and SUPABASE_KEY
+        SUPABASE_URL
+        and SUPABASE_KEY
     )
 
 
 def supabase_headers():
     return {
         "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Authorization": (
+            f"Bearer {SUPABASE_KEY}"
+        ),
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
@@ -202,12 +232,16 @@ def load_history():
     try:
 
         r = requests.get(
-            f"{SUPABASE_URL}/rest/v1/paper_observations",
+            f"{SUPABASE_URL}/rest/v1/"
+            "paper_observations",
+
             headers=supabase_headers(),
+
             params={
                 "select": "*",
                 "order": "created_at.desc",
             },
+
             timeout=10,
         )
 
@@ -216,21 +250,28 @@ def load_history():
         return r.json()
 
     except Exception:
-
         return []
 
 
 def save_history(row):
 
     if not supabase_ready():
-        return False, "Supabase is not configured."
+
+        return (
+            False,
+            "Supabase is not configured."
+        )
 
     try:
 
         r = requests.post(
-            f"{SUPABASE_URL}/rest/v1/paper_observations",
+            f"{SUPABASE_URL}/rest/v1/"
+            "paper_observations",
+
             headers=supabase_headers(),
+
             json=row,
+
             timeout=10,
         )
 
@@ -248,14 +289,24 @@ def save_history(row):
 def delete_history():
 
     if not supabase_ready():
-        return False, "Supabase is not configured."
+
+        return (
+            False,
+            "Supabase is not configured."
+        )
 
     try:
 
         r = requests.delete(
-            f"{SUPABASE_URL}/rest/v1/paper_observations",
+            f"{SUPABASE_URL}/rest/v1/"
+            "paper_observations",
+
             headers=supabase_headers(),
-            params={"id": "not.is.null"},
+
+            params={
+                "id": "not.is.null"
+            },
+
             timeout=10,
         )
 
@@ -269,38 +320,67 @@ def delete_history():
 
         return False, str(e)
 
-
 # ============================================================
-# COINCAP
+# COINGECKO CONFIGURATION
 # ============================================================
 
-def coincap_headers():
+def coingecko_config():
 
-    headers = {
-        "Accept": "application/json",
-        "User-Agent": "AI-Market-Intelligence/4.1",
-    }
+    if COINGECKO_PRO_API_KEY:
 
-    if COINCAP_TOKEN:
-        headers["Authorization"] = (
-            f"Bearer {COINCAP_TOKEN}"
+        return (
+            COINGECKO_PRO_BASE,
+
+            {
+                "x-cg-pro-api-key":
+                    COINGECKO_PRO_API_KEY
+            },
+
+            "CoinGecko Pro",
         )
 
-    return headers
+    if COINGECKO_DEMO_API_KEY:
+
+        return (
+            COINGECKO_DEMO_BASE,
+
+            {
+                "x-cg-demo-api-key":
+                    COINGECKO_DEMO_API_KEY
+            },
+
+            "CoinGecko Demo",
+        )
+
+    return (
+        COINGECKO_PUBLIC_BASE,
+        {},
+        "CoinGecko Public",
+    )
 
 
-def coincap_request(
+# ============================================================
+# COINGECKO REQUEST
+# ============================================================
+
+def coingecko_request(
     path,
     params=None,
 ):
 
-    endpoint = f"{COINCAP_BASE}{path}"
+    base, headers, plan = (
+        coingecko_config()
+    )
+
+    endpoint = (
+        f"{base}{path}"
+    )
 
     try:
 
         response = requests.get(
             endpoint,
-            headers=coincap_headers(),
+            headers=headers,
             params=params or {},
             timeout=15,
         )
@@ -316,12 +396,13 @@ def coincap_request(
             except ValueError:
 
                 message = (
-                    "HTTP request succeeded, "
-                    "but response was not valid JSON."
+                    "CoinGecko returned HTTP "
+                    "success but the response "
+                    "was not valid JSON."
                 )
 
                 record_api_diagnostic(
-                    "CoinCap",
+                    plan,
                     response.url,
                     response.status_code,
                     False,
@@ -332,7 +413,7 @@ def coincap_request(
                 return None, message
 
             record_api_diagnostic(
-                "CoinCap",
+                plan,
                 response.url,
                 response.status_code,
                 True,
@@ -345,47 +426,50 @@ def coincap_request(
         if response.status_code == 401:
 
             message = (
-                "401 Unauthorized: CoinCap API key "
-                "is missing or invalid."
+                "401 Unauthorized: the "
+                "CoinGecko API key is "
+                "missing or invalid."
             )
 
         elif response.status_code == 403:
 
             message = (
-                "403 Forbidden: API key or endpoint "
-                "may not be permitted."
+                "403 Forbidden: the selected "
+                "CoinGecko endpoint or API "
+                "key is not permitted."
             )
 
         elif response.status_code == 404:
 
             message = (
-                "404 Not Found: CoinCap endpoint or "
-                "asset ID could not be found."
+                "404 Not Found: check the "
+                "CoinGecko coin ID or endpoint."
             )
 
         elif response.status_code == 429:
 
             message = (
-                "429 Too Many Requests: CoinCap "
-                "rate limit reached."
+                "429 Too Many Requests: "
+                "CoinGecko rate limit reached. "
+                "Wait and retry."
             )
 
         elif response.status_code >= 500:
 
             message = (
-                f"{response.status_code}: CoinCap "
-                "server error."
+                f"{response.status_code}: "
+                "CoinGecko server error."
             )
 
         else:
 
             message = (
-                f"CoinCap returned HTTP "
+                f"CoinGecko returned HTTP "
                 f"{response.status_code}."
             )
 
         record_api_diagnostic(
-            "CoinCap",
+            plan,
             response.url,
             response.status_code,
             False,
@@ -398,11 +482,12 @@ def coincap_request(
     except requests.exceptions.Timeout:
 
         message = (
-            "Connection timed out after 15 seconds."
+            "Connection timed out after "
+            "15 seconds."
         )
 
         record_api_diagnostic(
-            "CoinCap",
+            plan,
             endpoint,
             None,
             False,
@@ -414,12 +499,12 @@ def coincap_request(
     except requests.exceptions.ConnectionError as e:
 
         message = (
-            "Connection error while contacting CoinCap: "
-            f"{e}"
+            "Connection error while contacting "
+            f"CoinGecko: {e}"
         )
 
         record_api_diagnostic(
-            "CoinCap",
+            plan,
             endpoint,
             None,
             False,
@@ -431,11 +516,11 @@ def coincap_request(
     except Exception as e:
 
         message = (
-            f"Unexpected CoinCap error: {e}"
+            f"Unexpected CoinGecko error: {e}"
         )
 
         record_api_diagnostic(
-            "CoinCap",
+            plan,
             endpoint,
             None,
             False,
@@ -445,188 +530,328 @@ def coincap_request(
         return None, message
 
 
-@st.cache_data(ttl=60)
-def coincap_find_asset(query):
+# ============================================================
+# COINGECKO COIN LIST
+# ============================================================
 
-    query = query.strip().lower()
+@st.cache_data(ttl=300)
+def coingecko_coin_list():
 
-    # Direct lookup
-    payload, error = coincap_request(
-        f"/assets/{query}"
-    )
-
-    if payload:
-
-        asset = payload.get("data")
-
-        if isinstance(asset, dict):
-
-            if asset.get("id"):
-
-                return asset, ""
-
-
-    # General asset search
-    payload, error2 = coincap_request(
-        "/assets",
-        {
-            "limit": 2000
-        },
-    )
-
-    if payload:
-
-        assets = payload.get(
-            "data",
-            []
+    payload, error = (
+        coingecko_request(
+            "/coins/list",
+            {
+                "include_platform":
+                    "false"
+            },
         )
-
-        # Exact match
-        for asset in assets:
-
-            asset_id = str(
-                asset.get("id", "")
-            ).lower()
-
-            symbol = str(
-                asset.get("symbol", "")
-            ).lower()
-
-            name = str(
-                asset.get("name", "")
-            ).lower()
-
-            if query in {
-                asset_id,
-                symbol,
-                name,
-            }:
-
-                return asset, ""
-
-        # Partial match
-        for asset in assets:
-
-            asset_id = str(
-                asset.get("id", "")
-            ).lower()
-
-            symbol = str(
-                asset.get("symbol", "")
-            ).lower()
-
-            name = str(
-                asset.get("name", "")
-            ).lower()
-
-            if (
-                query in asset_id
-                or query in symbol
-                or query in name
-            ):
-
-                return asset, ""
-
-    return None, (
-        error2
-        or error
-        or f"No CoinCap asset found for '{query}'."
-    )
-
-
-@st.cache_data(ttl=60)
-def coincap_history(
-    asset_id,
-    interval="m15",
-    hours=72,
-):
-
-    end = datetime.now(
-        timezone.utc
-    )
-
-    start = (
-        end
-        - timedelta(hours=hours)
-    )
-
-    params = {
-        "interval": interval,
-        "start": int(
-            start.timestamp() * 1000
-        ),
-        "end": int(
-            end.timestamp() * 1000
-        ),
-    }
-
-    payload, error = coincap_request(
-        f"/assets/{asset_id}/history",
-        params,
     )
 
     if not payload:
 
         raise RuntimeError(
-            error or
-            "CoinCap returned no data."
+            error
+            or
+            "CoinGecko returned no coin list."
         )
 
-    data = payload.get(
-        "data",
+    return payload
+
+
+# ============================================================
+# FIND COINGECKO ASSET
+# ============================================================
+
+@st.cache_data(ttl=120)
+def coingecko_find_asset(query):
+
+    query = query.strip().lower()
+
+    payload, error = (
+        coingecko_request(
+            f"/coins/{query}",
+
+            {
+                "localization": "false",
+                "tickers": "false",
+                "market_data": "true",
+                "community_data": "false",
+                "developer_data": "false",
+            },
+        )
+    )
+
+    if payload and payload.get("id"):
+
+        return payload, ""
+
+    try:
+
+        assets = (
+            coingecko_coin_list()
+        )
+
+    except Exception as e:
+
+        return None, str(e)
+
+    exact = []
+
+    for asset in assets:
+
+        asset_id = str(
+            asset.get("id", "")
+        ).lower()
+
+        symbol = str(
+            asset.get("symbol", "")
+        ).lower()
+
+        name = str(
+            asset.get("name", "")
+        ).lower()
+
+        if query in {
+            asset_id,
+            symbol,
+            name,
+        }:
+
+            exact.append(asset)
+
+    if exact:
+
+        return exact[0], ""
+
+    partial = []
+
+    for asset in assets:
+
+        asset_id = str(
+            asset.get("id", "")
+        ).lower()
+
+        symbol = str(
+            asset.get("symbol", "")
+        ).lower()
+
+        name = str(
+            asset.get("name", "")
+        ).lower()
+
+        if (
+            query in asset_id
+            or query in symbol
+            or query in name
+        ):
+
+            partial.append(asset)
+
+    if partial:
+
+        return partial[0], ""
+
+    return None, (
+        f"No CoinGecko coin matched "
+        f"'{query}'."
+    )
+
+
+# ============================================================
+# COINGECKO HISTORICAL DATA
+# ============================================================
+
+@st.cache_data(ttl=60)
+def coingecko_history(
+    asset_id,
+    interval="15m",
+):
+
+    if interval in [
+        "5m",
+        "15m",
+    ]:
+
+        days = 1
+
+    else:
+
+        days = 7
+
+    payload, error = (
+        coingecko_request(
+            f"/coins/{asset_id}/"
+            "market_chart",
+
+            {
+                "vs_currency": "usd",
+                "days": days,
+            },
+        )
+    )
+
+    if not payload:
+
+        raise RuntimeError(
+            error
+            or
+            "CoinGecko returned no "
+            "historical data."
+        )
+
+    prices = payload.get(
+        "prices",
         []
     )
 
-    if not data:
+    volumes = payload.get(
+        "total_volumes",
+        []
+    )
+
+    if not prices:
 
         raise RuntimeError(
-            f"No historical data returned "
-            f"for {asset_id}."
+            f"No price history returned "
+            f"for '{asset_id}'."
         )
 
-    df = pd.DataFrame(data)
-
-    if (
-        "time" not in df.columns
-        or "priceUsd" not in df.columns
-    ):
-
-        raise RuntimeError(
-            "CoinCap response does not contain "
-            "time and priceUsd."
-        )
+    df = pd.DataFrame(
+        prices,
+        columns=[
+            "time_ms",
+            "close",
+        ],
+    )
 
     df["time"] = pd.to_datetime(
-        df["time"],
+        df["time_ms"],
         unit="ms",
         utc=True,
     )
 
     df["close"] = pd.to_numeric(
-        df["priceUsd"],
+        df["close"],
         errors="coerce",
     )
 
-    # Create minimal OHLC representation.
-    df["open"] = df["close"].shift(1)
+    if volumes:
+
+        volume_df = pd.DataFrame(
+            volumes,
+            columns=[
+                "volume_time_ms",
+                "volume",
+            ],
+        )
+
+        volume_df["time"] = pd.to_datetime(
+            volume_df[
+                "volume_time_ms"
+            ],
+            unit="ms",
+            utc=True,
+        )
+
+        volume_df["volume"] = pd.to_numeric(
+            volume_df["volume"],
+            errors="coerce",
+        )
+
+        volume_df = volume_df[
+            [
+                "time",
+                "volume",
+            ]
+        ]
+
+        df = pd.merge_asof(
+            df.sort_values("time"),
+            volume_df.sort_values("time"),
+            on="time",
+            direction="nearest",
+        )
+
+    else:
+
+        df["volume"] = np.nan
+
+    # Build simple OHLC from price points.
+    df["open"] = (
+        df["close"].shift(1)
+    )
 
     df["high"] = df[
-        ["open", "close"]
+        [
+            "open",
+            "close",
+        ]
     ].max(axis=1)
 
     df["low"] = df[
-        ["open", "close"]
+        [
+            "open",
+            "close",
+        ]
     ].min(axis=1)
 
-    # CoinCap history does not supply
-    # the volume field used by the signal model.
-    df["volume"] = np.nan
-
-    return (
-        df
-        .dropna(subset=["close"])
-        .reset_index(drop=True)
+    df = (
+        df[
+            [
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+            ]
+        ]
+        .dropna(
+            subset=["close"]
+        )
+        .set_index("time")
     )
+
+    if interval == "15m":
+
+        df = df.resample(
+            "15min"
+        ).agg({
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+        })
+
+    elif interval == "1h":
+
+        df = df.resample(
+            "1h"
+        ).agg({
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+        })
+
+    df = (
+        df
+        .dropna(
+            subset=["close"]
+        )
+        .reset_index()
+    )
+
+    if len(df) < 10:
+
+        raise RuntimeError(
+            "CoinGecko returned too few "
+            "data points for the signal model."
+        )
+
+    return df
 
 
 # ============================================================
@@ -650,14 +875,18 @@ def yahoo_history(
 
     r = requests.get(
         f"{YAHOO_BASE}/{symbol}",
+
         headers={
-            "User-Agent": "Mozilla/5.0"
+            "User-Agent":
+                "Mozilla/5.0"
         },
+
         params={
             "range": "5d",
             "interval": yahoo_interval,
             "events": "history",
         },
+
         timeout=15,
     )
 
@@ -682,7 +911,8 @@ def yahoo_history(
         raise RuntimeError(
             str(error)
             if error
-            else "Yahoo returned no data."
+            else
+            "Yahoo returned no data."
         )
 
     result = result[0]
@@ -704,17 +934,26 @@ def yahoo_history(
             unit="s",
             utc=True,
         ),
+
         "open": quote.get("open"),
+
         "high": quote.get("high"),
+
         "low": quote.get("low"),
+
         "close": quote.get("close"),
+
         "volume": quote.get("volume"),
     })
 
     return (
         df
-        .dropna(subset=["close"])
-        .reset_index(drop=True)
+        .dropna(
+            subset=["close"]
+        )
+        .reset_index(
+            drop=True
+        )
     )
 
 
@@ -731,11 +970,13 @@ def binance_klines(
 
     r = requests.get(
         f"{BINANCE_BASE}/klines",
+
         params={
             "symbol": symbol,
             "interval": interval,
             "limit": limit,
         },
+
         timeout=10,
     )
 
@@ -743,14 +984,19 @@ def binance_klines(
 
     data = r.json()
 
-    if not isinstance(data, list):
+    if not isinstance(
+        data,
+        list,
+    ):
 
         raise RuntimeError(
-            "Binance returned no candle data."
+            "Binance returned no "
+            "candle data."
         )
 
     df = pd.DataFrame(
         data,
+
         columns=[
             "open_time",
             "open",
@@ -795,9 +1041,14 @@ def binance_klines(
 
 def get_features(df):
 
-    close = df["close"].astype(float)
+    close = (
+        df["close"]
+        .astype(float)
+    )
 
-    returns = close.pct_change()
+    returns = (
+        close.pct_change()
+    )
 
     fast_ema = (
         close
@@ -833,9 +1084,12 @@ def get_features(df):
         .mean()
     )
 
-    rs = gain / loss.replace(
-        0,
-        np.nan,
+    rs = (
+        gain
+        / loss.replace(
+            0,
+            np.nan,
+        )
     )
 
     rsi = (
@@ -851,8 +1105,13 @@ def get_features(df):
     )
 
     if (
-        np.isfinite(volume_mean)
+        np.isfinite(
+            volume_mean
+        )
         and volume_mean != 0
+        and np.isfinite(
+            df["volume"].iloc[-1]
+        )
     ):
 
         volume_ratio = float(
@@ -906,7 +1165,7 @@ def get_features(df):
 
 
 # ============================================================
-# SIGNAL MODEL
+# HYPOTHETICAL SIGNAL MODEL
 # ============================================================
 
 def make_signal(
@@ -949,7 +1208,9 @@ def make_signal(
         score += 3
 
     if (
-        np.isfinite(volume_ratio)
+        np.isfinite(
+            volume_ratio
+        )
         and volume_ratio > 1.5
         and momentum > 0
     ):
@@ -957,7 +1218,9 @@ def make_signal(
         score += 4
 
     if (
-        np.isfinite(volatility)
+        np.isfinite(
+            volatility
+        )
         and volatility > 3
     ):
 
@@ -995,19 +1258,19 @@ def base_for(symbol):
 
 
 # ============================================================
-# TITLE
+# HEADER
 # ============================================================
 
 st.title(
-    "🤖 AI Market Intelligence — Paper Trading"
+    "🤖 AI Market Intelligence v4.2"
 )
 
 st.caption(
-    "Read-only market data • hypothetical signals • "
-    "no real orders • confidence is a model score, "
-    "not a probability of profit."
+    "Read-only market data • "
+    "hypothetical signals • "
+    "persistent paper observations • "
+    "no real orders"
 )
-
 
 # ============================================================
 # SIDEBAR
@@ -1015,10 +1278,13 @@ st.caption(
 
 with st.sidebar:
 
-    st.header("Controls")
+    st.header(
+        "Controls"
+    )
 
     category = st.selectbox(
         "Asset category",
+
         [
             "TradFi / New Binance Perps",
             "Crypto",
@@ -1030,11 +1296,13 @@ with st.sidebar:
 
     interval = st.selectbox(
         "Analysis interval",
+
         [
             "5m",
             "15m",
             "1h",
         ],
+
         index=1,
     )
 
@@ -1046,15 +1314,19 @@ with st.sidebar:
 
     custom_type = st.selectbox(
         "Market",
+
         [
-            "Crypto via CoinCap",
+            "Crypto via CoinGecko",
             "US/HK/KR stock or ETF",
         ],
     )
 
     custom_symbol = st.text_input(
         "Symbol or crypto ID",
-        placeholder="e.g. SUI, pepe, AAPL",
+
+        placeholder=(
+            "e.g. SUI, pepe, AAPL"
+        ),
     ).strip()
 
     custom_name = st.text_input(
@@ -1073,11 +1345,11 @@ with st.sidebar:
 
         elif (
             custom_type
-            == "Crypto via CoinCap"
+            == "Crypto via CoinGecko"
         ):
 
             asset, error = (
-                coincap_find_asset(
+                coingecko_find_asset(
                     custom_symbol
                 )
             )
@@ -1085,13 +1357,14 @@ with st.sidebar:
             if not asset:
 
                 st.error(
-                    f"CoinCap lookup failed: "
+                    "CoinGecko lookup failed: "
                     f"{error}"
                 )
 
             else:
 
                 item = {
+
                     "symbol": str(
                         asset.get(
                             "symbol",
@@ -1107,18 +1380,21 @@ with st.sidebar:
                         )
                     ),
 
-                    "market": "coincap",
+                    "market":
+                        "coingecko",
 
-                    "asset_id": asset["id"],
+                    "asset_id":
+                        asset["id"],
                 }
 
                 if item not in (
-                    st.session_state.custom_assets
+                    st.session_state
+                    .custom_assets
                 ):
 
-                    st.session_state.custom_assets.append(
-                        item
-                    )
+                    st.session_state\
+                        .custom_assets\
+                        .append(item)
 
                 st.success(
                     f"Added {item['name']}"
@@ -1127,26 +1403,27 @@ with st.sidebar:
         else:
 
             item = {
+
                 "symbol":
                     custom_symbol.upper(),
 
-                "name":
-                    (
-                        custom_name
-                        or custom_symbol.upper()
-                    ),
+                "name": (
+                    custom_name
+                    or custom_symbol.upper()
+                ),
 
                 "market":
                     "yahoo",
             }
 
             if item not in (
-                st.session_state.custom_assets
+                st.session_state
+                .custom_assets
             ):
 
-                st.session_state.custom_assets.append(
-                    item
-                )
+                st.session_state\
+                    .custom_assets\
+                    .append(item)
 
             st.success(
                 f"Added {item['symbol']}"
@@ -1159,7 +1436,8 @@ with st.sidebar:
         )
 
         for item in (
-            st.session_state.custom_assets
+            st.session_state
+            .custom_assets
         ):
 
             st.write(
@@ -1177,6 +1455,37 @@ with st.sidebar:
 
     st.divider()
 
+    _, _, cg_plan = (
+        coingecko_config()
+    )
+
+    st.info(
+        f"Crypto source: {cg_plan}"
+    )
+
+    if cg_plan == (
+        "CoinGecko Public"
+    ):
+
+        st.caption(
+            "No API key configured. "
+            "Using CoinGecko public API."
+        )
+
+    elif cg_plan == (
+        "CoinGecko Demo"
+    ):
+
+        st.success(
+            "CoinGecko Demo API key detected."
+        )
+
+    else:
+
+        st.success(
+            "CoinGecko Pro API key detected."
+        )
+
     if supabase_ready():
 
         st.success(
@@ -1189,33 +1498,23 @@ with st.sidebar:
             "🟡 Persistent history needs Supabase"
         )
 
-    if COINCAP_TOKEN:
-
-        st.success(
-            "🟢 CoinCap API key detected"
-        )
-
-    else:
-
-        st.warning(
-            "🟡 CoinCap API key not detected"
-        )
-
 
 # ============================================================
 # BUILD WATCHLIST
 # ============================================================
 
-if category == "TradFi / New Binance Perps":
+if category == (
+    "TradFi / New Binance Perps"
+):
 
     watch = {
         symbol: {
             **data
         }
+
         for symbol, data
         in TRADFI.items()
     }
-
 
 elif category == "Crypto":
 
@@ -1224,59 +1523,87 @@ elif category == "Crypto":
     for symbol, data in CRYPTO.items():
 
         watch[symbol] = {
-            "name": data[0],
-            "ref": "CoinCap",
-            "theme": "Crypto",
-            "asset_id": data[1],
-        }
 
+            "name": data[0],
+
+            "ref":
+                "CoinGecko",
+
+            "theme":
+                "Crypto",
+
+            "asset_id":
+                data[1],
+        }
 
 elif category == "US Stocks":
 
     watch = {}
 
-    for symbol, data in US_STOCKS.items():
+    for symbol, data in (
+        US_STOCKS.items()
+    ):
 
         watch[symbol] = {
+
             "name": data[0],
+
             "ref": data[1],
+
             "theme": data[2],
         }
 
-
-elif category == "Indexes / ETFs":
+elif category == (
+    "Indexes / ETFs"
+):
 
     watch = {}
 
-    for symbol, data in ETFS.items():
+    for symbol, data in (
+        ETFS.items()
+    ):
 
         watch[symbol] = {
+
             "name": data[0],
+
             "ref": data[1],
+
             "theme": data[2],
         }
-
 
 else:
 
     watch = {}
 
     for item in (
-        st.session_state.custom_assets
+        st.session_state
+        .custom_assets
     ):
 
         watch[item["symbol"]] = {
-            "name": item["name"],
+
+            "name":
+                item["name"],
+
             "ref": (
-                "CoinCap"
+                "CoinGecko"
                 if item["market"]
-                == "coincap"
-                else "Yahoo Finance"
+                == "coingecko"
+                else
+                "Yahoo Finance"
             ),
-            "theme": "Custom watchlist",
-            "market": item["market"],
+
+            "theme":
+                "Custom watchlist",
+
+            "market":
+                item["market"],
+
             "asset_id":
-                item.get("asset_id"),
+                item.get(
+                    "asset_id"
+                ),
         }
 
 
@@ -1285,16 +1612,21 @@ else:
 # ============================================================
 
 rows = []
+
 raw = {}
+
 source_map = {}
+
 errors = {}
 
-for symbol, meta in watch.items():
+for symbol, meta in (
+    watch.items()
+):
 
     try:
 
         # ----------------------------------------------------
-        # SIX TRADFI PERPETUALS
+        # TRADFI
         # ----------------------------------------------------
 
         if category == (
@@ -1308,8 +1640,13 @@ for symbol, meta in watch.items():
                     interval,
                 )
 
-                source = "Binance contract"
-                status = "🟢 Live Binance"
+                source = (
+                    "Binance contract"
+                )
+
+                status = (
+                    "🟢 Live Binance"
+                )
 
             except Exception as e:
 
@@ -1319,7 +1656,8 @@ for symbol, meta in watch.items():
                 )
 
                 source = (
-                    f"Underlying {meta['ref']}"
+                    f"Underlying "
+                    f"{meta['ref']}"
                 )
 
                 status = (
@@ -1337,27 +1675,32 @@ for symbol, meta in watch.items():
 
         elif (
             category == "Crypto"
+
             or (
-                category == "Custom Watchlist"
-                and meta.get("market")
-                == "coincap"
+
+                category
+                == "Custom Watchlist"
+
+                and
+                meta.get("market")
+                == "coingecko"
             )
         ):
 
-            coincap_interval = {
-                "5m": "m5",
-                "15m": "m15",
-                "1h": "h1",
-            }[interval]
-
-            df = coincap_history(
+            df = coingecko_history(
                 meta["asset_id"],
-                coincap_interval,
-                hours=72,
+                interval,
             )
 
-            source = "CoinCap v3"
-            status = "🟢 CoinCap"
+            _, _, cg_plan = (
+                coingecko_config()
+            )
+
+            source = cg_plan
+
+            status = (
+                f"🟢 {cg_plan}"
+            )
 
         # ----------------------------------------------------
         # STOCKS / ETFs
@@ -1370,10 +1713,16 @@ for symbol, meta in watch.items():
                 interval,
             )
 
-            source = "Yahoo Finance"
-            status = "🟢 Yahoo Finance"
+            source = (
+                "Yahoo Finance"
+            )
+
+            status = (
+                "🟢 Yahoo Finance"
+            )
 
         raw[symbol] = df
+
         source_map[symbol] = source
 
         features = get_features(
@@ -1388,20 +1737,33 @@ for symbol, meta in watch.items():
         )
 
         rows.append([
+
             symbol,
+
             meta["name"],
+
             meta["ref"],
+
             float(
                 df["close"].iloc[-1]
             ),
+
             signal,
+
             confidence,
+
             features[0],
+
             features[2],
+
             features[3],
+
             features[1],
+
             features[4],
+
             source,
+
             status,
         ])
 
@@ -1410,18 +1772,31 @@ for symbol, meta in watch.items():
         errors[symbol] = str(e)
 
         rows.append([
+
             symbol,
+
             meta["name"],
+
             meta["ref"],
+
             np.nan,
+
             "Unavailable",
+
             0,
+
             np.nan,
+
             np.nan,
+
             np.nan,
+
             np.nan,
+
             np.nan,
+
             "Unavailable",
+
             "🔴 Data unavailable",
         ])
 
@@ -1431,20 +1806,35 @@ for symbol, meta in watch.items():
 # ============================================================
 
 board = pd.DataFrame(
+
     rows,
+
     columns=[
+
         "Symbol",
+
         "Asset",
+
         "Reference",
+
         "Price",
+
         "Signal",
+
         "Confidence",
+
         "RSI",
+
         "Momentum %",
+
         "Trend %",
+
         "Volume ratio",
+
         "Volatility %",
+
         "Data source",
+
         "Status",
     ],
 )
@@ -1453,19 +1843,45 @@ st.subheader(
     f"{category} Signal Board"
 )
 
-st.dataframe(
-    board.style.format({
-        "Price": "{:.6f}",
-        "Confidence": "{:.0f}%",
-        "RSI": "{:.1f}",
-        "Momentum %": "{:.2f}",
-        "Trend %": "{:.2f}",
-        "Volume ratio": "{:.2f}",
-        "Volatility %": "{:.2f}",
-    }),
-    use_container_width=True,
-    hide_index=True,
-)
+if not board.empty:
+
+    st.dataframe(
+
+        board.style.format({
+
+            "Price":
+                "{:.6f}",
+
+            "Confidence":
+                "{:.0f}%",
+
+            "RSI":
+                "{:.1f}",
+
+            "Momentum %":
+                "{:.2f}",
+
+            "Trend %":
+                "{:.2f}",
+
+            "Volume ratio":
+                "{:.2f}",
+
+            "Volatility %":
+                "{:.2f}",
+        }),
+
+        use_container_width=True,
+
+        hide_index=True,
+    )
+
+else:
+
+    st.info(
+        "No assets are currently "
+        "in this watchlist."
+    )
 
 
 # ============================================================
@@ -1475,35 +1891,67 @@ st.dataframe(
 with st.expander(
     "🔧 API Diagnostics",
     expanded=bool(
-        st.session_state.api_diagnostics
+
+        st.session_state
+        .api_diagnostics
+
+        and any(
+
+            x["status"]
+            == "ERROR"
+
+            for x in (
+                st.session_state
+                .api_diagnostics
+            )
+        )
     ),
 ):
 
+    base, _, cg_plan = (
+        coingecko_config()
+    )
+
     st.write(
-        "**CoinCap endpoint:**"
+        "**CoinGecko mode:**",
+        cg_plan,
     )
 
     st.code(
-        COINCAP_BASE
+        base
     )
 
-    if COINCAP_TOKEN:
+    if cg_plan == (
+        "CoinGecko Public"
+    ):
+
+        st.info(
+            "No CoinGecko key is configured. "
+            "Using the public API."
+        )
+
+    elif cg_plan == (
+        "CoinGecko Demo"
+    ):
 
         st.success(
-            "CoinCap API key is available."
+            "CoinGecko Demo key detected."
         )
 
     else:
 
-        st.error(
-            "COINCAP_TOKEN is missing. "
-            "Add it to Streamlit Secrets."
+        st.success(
+            "CoinGecko Pro key detected."
         )
 
-    if st.session_state.api_diagnostics:
+    if (
+        st.session_state
+        .api_diagnostics
+    ):
 
         diagnostics = pd.DataFrame(
-            st.session_state.api_diagnostics
+            st.session_state
+            .api_diagnostics
         )
 
         st.dataframe(
@@ -1513,13 +1961,21 @@ with st.expander(
         )
 
         latest_error = next(
+
             (
+
                 item
+
                 for item in reversed(
-                    st.session_state.api_diagnostics
+                    st.session_state
+                    .api_diagnostics
                 )
-                if item["status"] == "ERROR"
+
+                if item["status"]
+                == "ERROR"
+
             ),
+
             None,
         )
 
@@ -1527,20 +1983,27 @@ with st.expander(
 
             st.error(
                 "Latest API failure: "
-                + latest_error["message"]
+                + latest_error[
+                    "message"
+                ]
             )
 
-            if latest_error["response"]:
+            if latest_error[
+                "response"
+            ]:
 
                 st.code(
-                    latest_error["response"],
+                    latest_error[
+                        "response"
+                    ],
                     language="text",
                 )
 
     else:
 
         st.info(
-            "No API request has been recorded yet."
+            "No API requests have "
+            "been recorded yet."
         )
 
     if st.button(
@@ -1553,7 +2016,7 @@ with st.expander(
 
 
 # ============================================================
-# DATA-SOURCE ERRORS
+# DATA SOURCE ERRORS
 # ============================================================
 
 if errors:
@@ -1574,9 +2037,10 @@ if errors:
 if category == "Crypto":
 
     st.info(
-        "Crypto data is read-only and comes "
-        "from CoinCap. No Binance crypto orders "
-        "are sent by this application."
+        "Crypto data is supplied by "
+        "CoinGecko. This dashboard is "
+        "read-only and does not send "
+        "cryptocurrency orders."
     )
 
 
@@ -1585,14 +2049,14 @@ if category == (
 ):
 
     st.info(
-        "If a perpetual contract is unavailable, "
-        "the dashboard automatically falls back "
-        "to the corresponding HKEX/KRX underlying."
+        "If a contract is unavailable, "
+        "the dashboard falls back to "
+        "its configured HKEX/KRX underlying."
     )
 
 
 # ============================================================
-# INSPECT ASSET
+# ASSET INSPECTION
 # ============================================================
 
 if raw:
@@ -1627,7 +2091,7 @@ if raw:
     )
 
     c2.metric(
-        "Confidence",
+        "Confidence score",
         f"{confidence}%",
     )
 
@@ -1647,15 +2111,20 @@ if raw:
     )
 
     st.line_chart(
-        df.set_index("time")["close"],
+        df.set_index(
+            "time"
+        )["close"],
+
         height=320,
     )
 
     st.caption(
+
         f"{meta['name']} • "
         f"{meta['ref']} • "
         f"{meta['theme']} • "
-        f"Source: {source_map[selected]}"
+        f"Source: "
+        f"{source_map[selected]}"
     )
 
     # ========================================================
@@ -1667,17 +2136,22 @@ if raw:
     )
 
     direction = st.radio(
+
         "Hypothetical observation",
+
         [
             "Bullish",
             "Neutral",
             "Bearish",
         ],
+
         horizontal=True,
     )
 
     note = st.text_input(
+
         "Reason / note",
+
         placeholder=(
             "e.g. positive momentum + "
             "trend confirmation"
@@ -1689,24 +2163,44 @@ if raw:
     ):
 
         observation = {
-            "symbol": selected,
-            "category": category,
-            "price": float(
-                df["close"].iloc[-1]
-            ),
-            "signal": signal,
-            "confidence": int(
-                confidence
-            ),
-            "observation": direction,
-            "note": note,
-            "created_at": datetime.now(
-                timezone.utc
-            ).isoformat(),
+
+            "symbol":
+                selected,
+
+            "category":
+                category,
+
+            "price":
+                float(
+                    df[
+                        "close"
+                    ].iloc[-1]
+                ),
+
+            "signal":
+                signal,
+
+            "confidence":
+                int(
+                    confidence
+                ),
+
+            "observation":
+                direction,
+
+            "note":
+                note,
+
+            "created_at":
+                datetime.now(
+                    timezone.utc
+                ).isoformat(),
         }
 
-        ok, message = save_history(
-            observation
+        ok, message = (
+            save_history(
+                observation
+            )
         )
 
         if ok:
@@ -1753,7 +2247,9 @@ if history:
     ):
 
         current_price = np.nan
+
         move = np.nan
+
         result = "Pending"
 
         symbol = row.get(
@@ -1763,7 +2259,9 @@ if history:
         if symbol in raw:
 
             current_price = float(
-                raw[symbol]["close"].iloc[-1]
+                raw[symbol][
+                    "close"
+                ].iloc[-1]
             )
 
             recorded_price = float(
@@ -1780,30 +2278,42 @@ if history:
                 "observation"
             ]
 
-            if observation == "Bullish":
+            if observation == (
+                "Bullish"
+            ):
 
                 correct = move > 0
 
-            elif observation == "Bearish":
+            elif observation == (
+                "Bearish"
+            ):
 
                 correct = move < 0
 
             else:
 
-                correct = abs(move) < 0.50
+                correct = (
+                    abs(move)
+                    < 0.50
+                )
 
             result = (
                 "Correct"
                 if correct
-                else "Incorrect"
+                else
+                "Incorrect"
             )
 
         results.append({
+
             **row.to_dict(),
+
             "current_price":
                 current_price,
+
             "move_since_observation_%":
                 move,
+
             "result":
                 result,
         })
@@ -1813,13 +2323,17 @@ if history:
     )
 
     scored = result_df[
-        result_df["result"].isin([
+        result_df[
+            "result"
+        ].isin([
             "Correct",
             "Incorrect",
         ])
     ]
 
-    a, b, c = st.columns(3)
+    a, b, c = (
+        st.columns(3)
+    )
 
     a.metric(
         "Total observations",
@@ -1829,10 +2343,14 @@ if history:
     if len(scored):
 
         accuracy = (
+
             (
-                scored["result"]
+                scored[
+                    "result"
+                ]
                 == "Correct"
             ).mean()
+
             * 100
         )
 
@@ -1850,9 +2368,13 @@ if history:
 
     c.metric(
         "Pending",
+
         int(
+
             (
-                result_df["result"]
+                result_df[
+                    "result"
+                ]
                 == "Pending"
             ).sum()
         ),
@@ -1865,11 +2387,15 @@ if history:
     )
 
     st.download_button(
+
         "⬇️ Download paper history CSV",
+
         result_df.to_csv(
             index=False
         ),
+
         "paper_prediction_history.csv",
+
         "text/csv",
     )
 
@@ -1917,10 +2443,15 @@ else:
 # ============================================================
 
 st.caption(
-    "AI Market Intelligence v4.1 • "
-    "CoinCap v3 • API diagnostics • "
-    "Read-only paper analysis • "
+
+    "AI Market Intelligence v4.2 • "
+    "CoinGecko crypto data • "
+    "Yahoo Finance • "
+    "Binance fallback • "
+    "Persistent paper history • "
+    "Read-only analysis • "
     "Last refresh: "
+
     + datetime.now(
         timezone.utc
     ).strftime(
