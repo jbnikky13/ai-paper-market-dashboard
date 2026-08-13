@@ -2,165 +2,88 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timezone, timedelta
 
 st.set_page_config(
-    page_title="AI Market Intelligence",
+    page_title="AI Market Intelligence v4",
     page_icon="🤖",
-    layout="wide"
+    layout="wide",
 )
 
 # ============================================================
-# ASSET UNIVERSE
+# CONFIG
 # ============================================================
+
+COINCAP_BASE = "https://api.coincap.io/v2"
+YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 
 TRADFI = {
     "ZHONGJIUSDT": {
         "name": "ZhongJi InnoLight",
         "ref": "HKEX 3308",
         "theme": "AI optical infrastructure",
-        "underlying": "3308.HK"
+        "underlying": "3308.HK",
     },
     "HANMIUSDT": {
         "name": "Hanmi Semiconductor",
         "ref": "KRX 042700",
         "theme": "HBM / semiconductor equipment",
-        "underlying": "042700.KS"
+        "underlying": "042700.KS",
     },
     "SAMSUNGEMUSDT": {
         "name": "Samsung Electro-Mechanics",
         "ref": "KRX 009150",
         "theme": "AI components / MLCC",
-        "underlying": "009150.KS"
+        "underlying": "009150.KS",
     },
     "LGELECTRONICSUSDT": {
         "name": "LG Electronics",
         "ref": "KRX 066570",
         "theme": "Electronics / data-center cooling",
-        "underlying": "066570.KS"
+        "underlying": "066570.KS",
     },
     "NAVERUSDT": {
         "name": "NAVER",
         "ref": "KRX 035420",
         "theme": "AI / cloud / internet",
-        "underlying": "035420.KS"
+        "underlying": "035420.KS",
     },
     "KODEX200USDT": {
         "name": "Samsung KODEX 200 ETF",
         "ref": "KRX 069500",
         "theme": "Korean large-cap index",
-        "underlying": "069500.KS"
-    }
+        "underlying": "069500.KS",
+    },
 }
 
 CRYPTO = {
-    "BTCUSDT": (
-        "Bitcoin",
-        "Binance",
-        "Crypto / store of value"
-    ),
-    "ETHUSDT": (
-        "Ethereum",
-        "Binance",
-        "Smart-contract platform"
-    ),
-    "SOLUSDT": (
-        "Solana",
-        "Binance",
-        "Layer-1 blockchain"
-    ),
-    "BNBUSDT": (
-        "BNB",
-        "Binance",
-        "Exchange ecosystem"
-    ),
-    "XRPUSDT": (
-        "XRP",
-        "Binance",
-        "Payments / settlement"
-    ),
-    "DOGEUSDT": (
-        "Dogecoin",
-        "Binance",
-        "Meme / payments"
-    ),
-    "LINKUSDT": (
-        "Chainlink",
-        "Binance",
-        "Oracle infrastructure"
-    ),
-    "AVAXUSDT": (
-        "Avalanche",
-        "Binance",
-        "Layer-1 blockchain"
-    )
+    "BTCUSDT": ("Bitcoin", "bitcoin"),
+    "ETHUSDT": ("Ethereum", "ethereum"),
+    "SOLUSDT": ("Solana", "solana"),
+    "BNBUSDT": ("BNB", "binance-coin"),
+    "XRPUSDT": ("XRP", "xrp"),
+    "DOGEUSDT": ("Dogecoin", "dogecoin"),
+    "LINKUSDT": ("Chainlink", "chainlink"),
+    "AVAXUSDT": ("Avalanche", "avalanche"),
 }
 
 US_STOCKS = {
-    "NVDA": (
-        "NVIDIA",
-        "NASDAQ",
-        "AI accelerators / data centers"
-    ),
-    "AMD": (
-        "AMD",
-        "NASDAQ",
-        "AI accelerators / CPUs"
-    ),
-    "AVGO": (
-        "Broadcom",
-        "NASDAQ",
-        "AI networking / semiconductors"
-    ),
-    "MSFT": (
-        "Microsoft",
-        "NASDAQ",
-        "Cloud / AI"
-    ),
-    "GOOGL": (
-        "Alphabet",
-        "NASDAQ",
-        "AI / cloud / search"
-    ),
-    "AMZN": (
-        "Amazon",
-        "NASDAQ",
-        "Cloud / AI / commerce"
-    ),
-    "META": (
-        "Meta",
-        "NASDAQ",
-        "AI / advertising"
-    ),
-    "TSLA": (
-        "Tesla",
-        "NASDAQ",
-        "EV / autonomy / AI"
-    ),
-    "AAPL": (
-        "Apple",
-        "NASDAQ",
-        "Consumer tech / AI"
-    )
+    "NVDA": ("NVIDIA", "NASDAQ", "AI accelerators / data centers"),
+    "AMD": ("AMD", "NASDAQ", "AI accelerators / CPUs"),
+    "AVGO": ("Broadcom", "NASDAQ", "AI networking / semiconductors"),
+    "MSFT": ("Microsoft", "NASDAQ", "Cloud / AI"),
+    "GOOGL": ("Alphabet", "NASDAQ", "AI / cloud / search"),
+    "AMZN": ("Amazon", "NASDAQ", "Cloud / AI / commerce"),
+    "META": ("Meta", "NASDAQ", "AI / advertising"),
+    "TSLA": ("Tesla", "NASDAQ", "EV / autonomy / AI"),
+    "AAPL": ("Apple", "NASDAQ", "Consumer tech / AI"),
 }
 
 ETFS = {
-    "QQQ": (
-        "Invesco QQQ",
-        "NASDAQ",
-        "Nasdaq-100"
-    ),
-    "SPY": (
-        "SPDR S&P 500 ETF",
-        "NYSE Arca",
-        "S&P 500"
-    )
+    "QQQ": ("Invesco QQQ", "NASDAQ", "Nasdaq-100"),
+    "SPY": ("SPDR S&P 500 ETF", "NYSE Arca", "S&P 500"),
 }
-
-
-# ============================================================
-# BASE SCORES
-# ============================================================
 
 BASE = {
     "ZHONGJIUSDT": 68,
@@ -190,44 +113,411 @@ BASE = {
     "AAPL": 59,
 
     "QQQ": 58,
-    "SPY": 57
+    "SPY": 57,
 }
 
 
 # ============================================================
-# SESSION STATE
+# SECRETS
 # ============================================================
 
-if "custom_assets" not in st.session_state:
-    st.session_state.custom_assets = []
+def get_secret(name, default=""):
+    try:
+        return st.secrets.get(name, default)
+    except Exception:
+        return os.getenv(name, default)
 
-if "paper" not in st.session_state:
-    st.session_state.paper = []
+
+SUPABASE_URL = get_secret(
+    "SUPABASE_URL"
+).rstrip("/")
+
+SUPABASE_KEY = get_secret(
+    "SUPABASE_KEY"
+)
+
+COINCAP_TOKEN = get_secret(
+    "COINCAP_TOKEN"
+)
+
+
+def supabase_ready():
+    return bool(
+        SUPABASE_URL
+        and SUPABASE_KEY
+    )
+
+
+def supabase_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
 
 
 # ============================================================
-# BINANCE DATA
+# PERSISTENT PAPER HISTORY — SUPABASE
+# ============================================================
+
+@st.cache_data(ttl=15)
+def load_history():
+
+    if not supabase_ready():
+        return []
+
+    try:
+
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/paper_observations",
+            headers=supabase_headers(),
+            params={
+                "select": "*",
+                "order": "created_at.desc",
+            },
+            timeout=10,
+        )
+
+        r.raise_for_status()
+
+        return r.json()
+
+    except Exception:
+
+        return []
+
+
+def save_history(row):
+
+    if not supabase_ready():
+
+        return (
+            False,
+            "Supabase is not configured."
+        )
+
+    try:
+
+        r = requests.post(
+            f"{SUPABASE_URL}/rest/v1/paper_observations",
+            headers=supabase_headers(),
+            json=row,
+            timeout=10,
+        )
+
+        r.raise_for_status()
+
+        load_history.clear()
+
+        return (
+            True,
+            "Saved."
+        )
+
+    except Exception as e:
+
+        return (
+            False,
+            str(e)
+        )
+
+
+def delete_history():
+
+    if not supabase_ready():
+
+        return (
+            False,
+            "Supabase is not configured."
+        )
+
+    try:
+
+        r = requests.delete(
+            f"{SUPABASE_URL}/rest/v1/paper_observations",
+            headers=supabase_headers(),
+            params={
+                "id": "not.is.null"
+            },
+            timeout=10,
+        )
+
+        r.raise_for_status()
+
+        load_history.clear()
+
+        return (
+            True,
+            "History deleted."
+        )
+
+    except Exception as e:
+
+        return (
+            False,
+            str(e)
+        )
+
+
+# ============================================================
+# COINCAP — CRYPTO DATA SOURCE
+# ============================================================
+
+def coincap_headers():
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent":
+            "AI-Market-Intelligence/4.0",
+    }
+
+    if COINCAP_TOKEN:
+
+        headers[
+            "Authorization"
+        ] = f"Bearer {COINCAP_TOKEN}"
+
+    return headers
+
+
+@st.cache_data(ttl=30)
+def coincap_asset_search(query):
+
+    r = requests.get(
+        f"{COINCAP_BASE}/assets",
+        headers=coincap_headers(),
+        params={
+            "search": query,
+            "limit": 10,
+        },
+        timeout=15,
+    )
+
+    r.raise_for_status()
+
+    return r.json().get(
+        "data",
+        []
+    )
+
+
+@st.cache_data(ttl=30)
+def coincap_history(
+    asset_id,
+    interval="m15",
+    hours=72
+):
+
+    end = datetime.now(
+        timezone.utc
+    )
+
+    start = (
+        end
+        - timedelta(hours=hours)
+    )
+
+    params = {
+        "interval": interval,
+        "start": int(
+            start.timestamp() * 1000
+        ),
+        "end": int(
+            end.timestamp() * 1000
+        ),
+    }
+
+    r = requests.get(
+        f"{COINCAP_BASE}/assets/"
+        f"{asset_id}/history",
+        headers=coincap_headers(),
+        params=params,
+        timeout=15,
+    )
+
+    r.raise_for_status()
+
+    data = r.json().get(
+        "data",
+        []
+    )
+
+    if not data:
+
+        raise ValueError(
+            "CoinCap returned no historical data."
+        )
+
+    df = pd.DataFrame(
+        data
+    )
+
+    df["time"] = pd.to_datetime(
+        df["time"],
+        unit="ms",
+        utc=True,
+    )
+
+    df["close"] = pd.to_numeric(
+        df["priceUsd"],
+        errors="coerce",
+    )
+
+    # CoinCap history provides price history.
+    # Historical candle volume isn't supplied here.
+    df["volume"] = np.nan
+
+    df["open"] = (
+        df["close"].shift(1)
+    )
+
+    df["high"] = df[
+        ["open", "close"]
+    ].max(axis=1)
+
+    df["low"] = df[
+        ["open", "close"]
+    ].min(axis=1)
+
+    return df.dropna(
+        subset=["close"]
+    ).reset_index(
+        drop=True
+    )
+
+
+# ============================================================
+# YAHOO FINANCE
+# ============================================================
+
+@st.cache_data(ttl=120)
+def yahoo_history(
+    symbol,
+    interval="15m"
+):
+
+    yahoo_interval = (
+        "15m"
+        if interval
+        in ["1m", "5m", "15m"]
+        else "1h"
+    )
+
+    r = requests.get(
+        f"{YAHOO_BASE}/{symbol}",
+        headers={
+            "User-Agent":
+                "Mozilla/5.0"
+        },
+        params={
+            "range": "5d",
+            "interval":
+                yahoo_interval,
+            "events": "history",
+        },
+        timeout=15,
+    )
+
+    r.raise_for_status()
+
+    payload = r.json()
+
+    result = (
+        payload
+        .get("chart", {})
+        .get("result")
+    )
+
+    if not result:
+
+        error = (
+            payload
+            .get("chart", {})
+            .get("error")
+        )
+
+        raise ValueError(
+            str(error)
+            if error
+            else
+            "Yahoo returned no data."
+        )
+
+    result = result[0]
+
+    quote = (
+        result[
+            "indicators"
+        ]["quote"][0]
+    )
+
+    df = pd.DataFrame({
+
+        "time":
+            pd.to_datetime(
+                result["timestamp"],
+                unit="s",
+                utc=True,
+            ),
+
+        "open":
+            quote.get("open"),
+
+        "high":
+            quote.get("high"),
+
+        "low":
+            quote.get("low"),
+
+        "close":
+            quote.get("close"),
+
+        "volume":
+            quote.get("volume"),
+    })
+
+    return df.dropna(
+        subset=["close"]
+    ).reset_index(
+        drop=True
+    )
+
+
+# ============================================================
+# BINANCE
+# ONLY USED FOR THE SIX TRADFI PERPETUALS
 # ============================================================
 
 @st.cache_data(ttl=30)
-def binance_klines(symbol, interval="5m", limit=200):
+def binance_klines(
+    symbol,
+    interval="5m",
+    limit=200
+):
 
-    response = requests.get(
+    r = requests.get(
         "https://api.binance.com/api/v3/klines",
         params={
-            "symbol": symbol.upper(),
+            "symbol": symbol,
             "interval": interval,
-            "limit": limit
+            "limit": limit,
         },
-        timeout=10
+        timeout=10,
     )
 
-    response.raise_for_status()
+    r.raise_for_status()
 
-    data = response.json()
+    data = r.json()
 
-    if not isinstance(data, list):
-        raise ValueError("Binance returned no candle data")
+    if not isinstance(
+        data,
+        list
+    ):
+
+        raise ValueError(
+            "Binance returned no candle data."
+        )
 
     df = pd.DataFrame(
         data,
@@ -243,125 +533,98 @@ def binance_klines(symbol, interval="5m", limit=200):
             "trades",
             "tb",
             "tq",
-            "ignore"
-        ]
+            "ignore",
+        ],
     )
 
-    for column in [
+    for col in [
         "open",
         "high",
         "low",
         "close",
-        "volume"
+        "volume",
     ]:
-        df[column] = pd.to_numeric(
-            df[column],
-            errors="coerce"
+
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce",
         )
 
     df["time"] = pd.to_datetime(
         df["open_time"],
         unit="ms",
-        utc=True
+        utc=True,
     )
 
     return df
 
 
 # ============================================================
-# YAHOO FINANCE DATA
-# ============================================================
-
-@st.cache_data(ttl=120)
-def yahoo_klines(symbol, interval="15m"):
-
-    if interval in ["1m", "5m", "15m"]:
-        yahoo_interval = "15m"
-    else:
-        yahoo_interval = "1h"
-
-    response = requests.get(
-        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
-        params={
-            "range": "5d",
-            "interval": yahoo_interval,
-            "events": "history"
-        },
-        headers={
-            "User-Agent": "Mozilla/5.0"
-        },
-        timeout=10
-    )
-
-    response.raise_for_status()
-
-    result = response.json()["chart"]["result"][0]
-
-    quote = result["indicators"]["quote"][0]
-
-    df = pd.DataFrame({
-        "time": pd.to_datetime(
-            result["timestamp"],
-            unit="s",
-            utc=True
-        ),
-        "open": quote["open"],
-        "high": quote["high"],
-        "low": quote["low"],
-        "close": quote["close"],
-        "volume": quote.get(
-            "volume",
-            [np.nan] * len(result["timestamp"])
-        )
-    })
-
-    return df.dropna(
-        subset=["close"]
-    ).reset_index(drop=True)
-
-
-# ============================================================
 # TECHNICAL FEATURES
 # ============================================================
 
-def features(df):
+def get_features(df):
 
-    close = df["close"].astype(float)
+    close = (
+        df["close"]
+        .astype(float)
+    )
 
-    returns = close.pct_change()
+    returns = (
+        close.pct_change()
+    )
 
-    fast_ema = close.ewm(
-        span=12,
-        adjust=False
-    ).mean()
+    fast_ema = (
+        close
+        .ewm(
+            span=12,
+            adjust=False
+        )
+        .mean()
+    )
 
-    slow_ema = close.ewm(
-        span=26,
-        adjust=False
-    ).mean()
+    slow_ema = (
+        close
+        .ewm(
+            span=26,
+            adjust=False
+        )
+        .mean()
+    )
 
-    # RSI
     delta = close.diff()
 
-    gain = delta.clip(
-        lower=0
-    ).rolling(14).mean()
+    gain = (
+        delta
+        .clip(lower=0)
+        .rolling(14)
+        .mean()
+    )
 
     loss = (
-        -delta.clip(upper=0)
-    ).rolling(14).mean()
-
-    rs = gain / loss.replace(
-        0,
-        np.nan
+        -delta
+        .clip(upper=0)
+        .rolling(14)
+        .mean()
     )
 
-    rsi = 100 - (
-        100 / (1 + rs)
+    rs = (
+        gain
+        / loss.replace(
+            0,
+            np.nan
+        )
     )
 
-    # Volume ratio
-    average_volume = (
+    rsi = (
+        100
+        - (
+            100
+            / (1 + rs)
+        )
+    )
+
+    avg_volume = (
         df["volume"]
         .rolling(20)
         .mean()
@@ -369,17 +632,19 @@ def features(df):
     )
 
     if (
-        np.isfinite(average_volume)
-        and average_volume != 0
+        np.isfinite(avg_volume)
+        and avg_volume != 0
     ):
+
         volume_ratio = float(
             df["volume"].iloc[-1]
-            / average_volume
+            / avg_volume
         )
+
     else:
+
         volume_ratio = np.nan
 
-    # Momentum
     if len(close) >= 21:
 
         momentum = float(
@@ -391,9 +656,9 @@ def features(df):
         )
 
     else:
-        momentum = 0
 
-    # EMA trend
+        momentum = 0.0
+
     trend = float(
         (
             fast_ema.iloc[-1]
@@ -402,20 +667,22 @@ def features(df):
         ) * 100
     )
 
-    # Volatility
     volatility = float(
         returns
         .rolling(20)
         .std()
-        .iloc[-1] * 100
+        .iloc[-1]
+        * 100
     )
 
     return (
-        float(rsi.iloc[-1]),
+        float(
+            rsi.iloc[-1]
+        ),
         volume_ratio,
         momentum,
         trend,
-        volatility
+        volatility,
     )
 
 
@@ -423,33 +690,35 @@ def features(df):
 # SIGNAL ENGINE
 # ============================================================
 
-def make_signal(features_data, base):
+def make_signal(
+    f,
+    base
+):
 
     (
         rsi,
         volume_ratio,
         momentum,
         trend,
-        volatility
-    ) = features_data
+        volatility,
+    ) = f
 
-    score = float(base)
-
-    # Momentum
-    score += np.clip(
-        momentum * 2.0,
-        -10,
-        10
+    score = float(
+        base
     )
 
-    # EMA trend
+    score += np.clip(
+        momentum * 2,
+        -10,
+        10,
+    )
+
     score += np.clip(
         trend * 80,
         -8,
-        8
+        8,
     )
 
-    # RSI
     if 50 <= rsi <= 70:
 
         score += 4
@@ -462,18 +731,20 @@ def make_signal(features_data, base):
 
         score += 3
 
-    # Volume confirmation
     if (
-        np.isfinite(volume_ratio)
+        np.isfinite(
+            volume_ratio
+        )
         and volume_ratio > 1.5
         and momentum > 0
     ):
 
         score += 4
 
-    # High volatility penalty
     if (
-        np.isfinite(volatility)
+        np.isfinite(
+            volatility
+        )
         and volatility > 3
     ):
 
@@ -499,71 +770,46 @@ def make_signal(features_data, base):
 
         signal = "Neutral"
 
-    return signal, score
+    return (
+        signal,
+        score
+    )
 
-
-# ============================================================
-# BASE SCORE FOR CUSTOM ASSETS
-# ============================================================
 
 def base_for(symbol):
 
-    if symbol in BASE:
-
-        return BASE[symbol]
-
-    # Unknown assets begin neutral.
-    return 55
+    return BASE.get(
+        symbol,
+        55
+    )
 
 
 # ============================================================
-# PAPER TRADE RESULT
+# SESSION STATE
 # ============================================================
 
-def direction_correct(
-    observation,
-    current_price,
-    recorded_price
+if (
+    "custom_assets"
+    not in st.session_state
 ):
 
-    if (
-        not np.isfinite(current_price)
-        or not np.isfinite(recorded_price)
-    ):
-
-        return None
-
-    change = (
-        current_price
-        / recorded_price
-        - 1
-    ) * 100
-
-    if observation == "Bullish":
-
-        return change > 0
-
-    if observation == "Bearish":
-
-        return change < 0
-
-    # Neutral = movement less than 0.5%
-    return abs(change) < 0.50
+    st.session_state.custom_assets = []
 
 
 # ============================================================
-# PAGE TITLE
+# HEADER
 # ============================================================
 
 st.title(
-    "🤖 AI Market Intelligence — Paper Trading"
+    "🤖 AI Market Intelligence — v4"
 )
 
 st.caption(
     "Read-only market data • "
-    "Hypothetical signals • "
-    "No real orders • "
-    "Confidence is a model score, not a probability of profit."
+    "hypothetical signals • "
+    "no real orders • "
+    "confidence is a model score, "
+    "not a probability of profit."
 )
 
 
@@ -573,7 +819,9 @@ st.caption(
 
 with st.sidebar:
 
-    st.header("Controls")
+    st.header(
+        "Controls"
+    )
 
     category = st.selectbox(
         "Asset category",
@@ -582,19 +830,18 @@ with st.sidebar:
             "Crypto",
             "US Stocks",
             "Indexes / ETFs",
-            "Custom Watchlist"
-        ]
+            "Custom Watchlist",
+        ],
     )
 
     interval = st.selectbox(
-        "Binance candle interval",
+        "Analysis interval",
         [
-            "1m",
             "5m",
             "15m",
-            "1h"
+            "1h",
         ],
-        index=1
+        index=1,
     )
 
     st.divider()
@@ -606,15 +853,15 @@ with st.sidebar:
     custom_type = st.selectbox(
         "Market",
         [
-            "Binance crypto",
-            "US/HK/KR stock or ETF"
-        ]
+            "Crypto via CoinCap",
+            "US/HK/KR stock or ETF",
+        ],
     )
 
     custom_symbol = st.text_input(
-        "Symbol",
-        placeholder="e.g. SUIUSDT or AAPL"
-    ).strip().upper()
+        "Symbol or crypto ID",
+        placeholder="e.g. SUI, pepe, AAPL",
+    ).strip()
 
     custom_name = st.text_input(
         "Display name (optional)"
@@ -624,45 +871,111 @@ with st.sidebar:
         "Add to watchlist"
     ):
 
-        if custom_symbol:
+        if not custom_symbol:
 
-            item = {
-                "symbol": custom_symbol,
-                "name": (
-                    custom_name
-                    or custom_symbol
-                ),
-                "market": (
-                    "binance"
-                    if custom_type
-                    == "Binance crypto"
-                    else "yahoo"
-                )
-            }
+            st.warning(
+                "Enter a symbol first."
+            )
 
-            if (
-                item
-                not in st.session_state.custom_assets
-            ):
+        elif (
+            custom_type
+            == "Crypto via CoinCap"
+        ):
 
-                st.session_state.custom_assets.append(
-                    item
+            try:
+
+                matches = (
+                    coincap_asset_search(
+                        custom_symbol
+                    )
                 )
 
-                st.success(
-                    f"Added {custom_symbol}"
-                )
+                if not matches:
 
-            else:
+                    st.error(
+                        "No CoinCap asset found."
+                    )
 
-                st.info(
-                    "Already in custom watchlist."
+                else:
+
+                    top = matches[0]
+
+                    item = {
+                        "symbol":
+                            top.get(
+                                "symbol",
+                                "",
+                            ).upper(),
+
+                        "name":
+                            (
+                                custom_name
+                                or top.get(
+                                    "name",
+                                    custom_symbol,
+                                )
+                            ),
+
+                        "market":
+                            "coincap",
+
+                        "asset_id":
+                            top["id"],
+                    }
+
+                    if (
+                        item
+                        not in
+                        st.session_state
+                        .custom_assets
+                    ):
+
+                        st.session_state\
+                            .custom_assets\
+                            .append(item)
+
+                    st.success(
+                        f"Added "
+                        f"{item['name']} "
+                        f"({item['asset_id']})"
+                    )
+
+            except Exception as e:
+
+                st.error(
+                    f"CoinCap search failed: {e}"
                 )
 
         else:
 
-            st.warning(
-                "Enter a symbol first."
+            item = {
+                "symbol":
+                    custom_symbol.upper(),
+
+                "name":
+                    (
+                        custom_name
+                        or custom_symbol.upper()
+                    ),
+
+                "market":
+                    "yahoo",
+            }
+
+            if (
+                item
+                not in
+                st.session_state
+                .custom_assets
+            ):
+
+                st.session_state\
+                    .custom_assets\
+                    .append(item)
+
+            st.success(
+                f"Added "
+                f"{item['symbol']}"
             )
 
     if st.session_state.custom_assets:
@@ -671,43 +984,70 @@ with st.sidebar:
             "Custom watchlist"
         )
 
-        for item in st.session_state.custom_assets:
+        for item in (
+            st.session_state
+            .custom_assets
+        ):
 
             st.write(
-                f"• {item['symbol']}"
+                f"• {item['name']} "
+                f"({item['symbol']})"
             )
 
         if st.button(
             "Clear custom watchlist"
         ):
 
-            st.session_state.custom_assets = []
+            st.session_state\
+                .custom_assets = []
 
             st.rerun()
 
     st.divider()
 
-    if st.button(
-        "Clear paper history"
-    ):
+    if supabase_ready():
 
-        st.session_state.paper = []
+        st.success(
+            "🟢 Persistent history connected"
+        )
 
-        st.rerun()
+    else:
+
+        st.warning(
+            "🟡 Persistent history needs Supabase"
+        )
+
+    st.caption(
+        "Crypto: CoinCap aggregated "
+        "market data"
+    )
 
 
 # ============================================================
-# BUILD WATCHLIST
+# WATCHLIST
 # ============================================================
 
-if category == "TradFi / New Binance Perps":
+if (
+    category
+    == "TradFi / New Binance Perps"
+):
 
     watch = {
+
         symbol: {
-            "name": data["name"],
-            "ref": data["ref"],
-            "theme": data["theme"],
-            "underlying": data["underlying"]
+
+            "name":
+                data["name"],
+
+            "ref":
+                data["ref"],
+
+            "theme":
+                data["theme"],
+
+            "underlying":
+                data["underlying"],
+
         }
 
         for symbol, data
@@ -717,10 +1057,21 @@ if category == "TradFi / New Binance Perps":
 elif category == "Crypto":
 
     watch = {
+
         symbol: {
-            "name": data[0],
-            "ref": data[1],
-            "theme": data[2]
+
+            "name":
+                data[0],
+
+            "ref":
+                "CoinCap",
+
+            "theme":
+                "Crypto",
+
+            "asset_id":
+                data[1],
+
         }
 
         for symbol, data
@@ -730,10 +1081,18 @@ elif category == "Crypto":
 elif category == "US Stocks":
 
     watch = {
+
         symbol: {
-            "name": data[0],
-            "ref": data[1],
-            "theme": data[2]
+
+            "name":
+                data[0],
+
+            "ref":
+                data[1],
+
+            "theme":
+                data[2],
+
         }
 
         for symbol, data
@@ -743,10 +1102,18 @@ elif category == "US Stocks":
 elif category == "Indexes / ETFs":
 
     watch = {
+
         symbol: {
-            "name": data[0],
-            "ref": data[1],
-            "theme": data[2]
+
+            "name":
+                data[0],
+
+            "ref":
+                data[1],
+
+            "theme":
+                data[2],
+
         }
 
         for symbol, data
@@ -756,15 +1123,37 @@ elif category == "Indexes / ETFs":
 else:
 
     watch = {
+
         item["symbol"]: {
-            "name": item["name"],
-            "ref": item["market"],
-            "theme": "Custom watchlist",
-            "market": item["market"]
+
+            "name":
+                item["name"],
+
+            "ref":
+                (
+                    "CoinCap"
+                    if item["market"]
+                    == "coincap"
+                    else
+                    "Yahoo Finance"
+                ),
+
+            "theme":
+                "Custom watchlist",
+
+            "market":
+                item["market"],
+
+            "asset_id":
+                item.get(
+                    "asset_id"
+                ),
+
         }
 
         for item
-        in st.session_state.custom_assets
+        in st.session_state
+        .custom_assets
     }
 
 
@@ -773,272 +1162,386 @@ else:
 # ============================================================
 
 rows = []
-
 raw = {}
-
 source_map = {}
+errors = {}
 
 
 for symbol, meta in watch.items():
 
     try:
 
-        # ----------------------------------------------------
-        # NEW TRADFI BINANCE PERPETUALS
-        # ----------------------------------------------------
-
-        if category == "TradFi / New Binance Perps":
+        if (
+            category
+            == "TradFi / New Binance Perps"
+        ):
 
             try:
 
-                # First try Binance contract.
                 df = binance_klines(
                     symbol,
-                    interval
-                )
-
-                source = "Binance contract"
-
-            except Exception:
-
-                # If contract doesn't exist yet,
-                # use the underlying HKEX/KRX asset.
-                df = yahoo_klines(
-                    meta["underlying"],
-                    interval
+                    interval,
                 )
 
                 source = (
-                    f"Underlying {meta['ref']}"
+                    "Binance contract"
                 )
 
-        # ----------------------------------------------------
-        # CRYPTO / CUSTOM
-        # ----------------------------------------------------
-
-        elif category in [
-            "Crypto",
-            "Custom Watchlist"
-        ]:
-
-            if (
-                category == "Crypto"
-                or meta.get("market")
-                == "binance"
-            ):
-
-                df = binance_klines(
-                    symbol,
-                    interval
+                status = (
+                    "🟢 Live Binance"
                 )
 
-                source = "Binance"
+            except Exception as binance_error:
 
-            else:
-
-                df = yahoo_klines(
-                    symbol,
-                    interval
+                df = yahoo_history(
+                    meta["underlying"],
+                    interval,
                 )
 
-                source = "Yahoo Finance"
+                source = (
+                    f"Underlying "
+                    f"{meta['ref']}"
+                )
 
-        # ----------------------------------------------------
-        # STOCKS / ETFs
-        # ----------------------------------------------------
+                status = (
+                    "🟡 Underlying fallback"
+                )
+
+                errors[symbol] = (
+                    "Binance unavailable: "
+                    + str(
+                        binance_error
+                    )
+                )
+
+        elif (
+            category == "Crypto"
+            or (
+                category
+                == "Custom Watchlist"
+                and meta.get(
+                    "market"
+                )
+                == "coincap"
+            )
+        ):
+
+            # Crypto deliberately uses CoinCap,
+            # not Binance.
+
+            coincap_interval = {
+
+                "5m":
+                    "m5",
+
+                "15m":
+                    "m15",
+
+                "1h":
+                    "h1",
+
+            }[interval]
+
+            df = coincap_history(
+                meta["asset_id"],
+                coincap_interval,
+                hours=72,
+            )
+
+            source = "CoinCap"
+
+            status = (
+                "🟢 CoinCap"
+            )
 
         else:
 
-            df = yahoo_klines(
+            df = yahoo_history(
                 symbol,
-                interval
+                interval,
             )
 
-            source = "Yahoo Finance"
+            source = (
+                "Yahoo Finance"
+            )
 
+            status = (
+                "🟢 Yahoo Finance"
+            )
 
-        # Save data
         raw[symbol] = df
 
         source_map[symbol] = source
 
-        # Technical indicators
-        f = features(df)
-
-        # AI signal
-        signal, confidence = make_signal(
-            f,
-            base_for(symbol)
+        f = get_features(
+            df
         )
 
-        rows.append(
-            [
-                symbol,
-                meta["name"],
-                meta["ref"],
-                float(
-                    df["close"].iloc[-1]
-                ),
-                signal,
-                confidence,
-                f[0],
-                f[2],
-                f[3],
-                f[1],
-                f[4],
-                source
-            ]
+        signal, confidence = (
+            make_signal(
+                f,
+                base_for(symbol),
+            )
         )
 
+        rows.append([
 
-    except Exception:
+            symbol,
 
-        rows.append(
-            [
-                symbol,
-                meta["name"],
-                meta["ref"],
-                np.nan,
-                "Unavailable",
-                0,
-                np.nan,
-                np.nan,
-                np.nan,
-                np.nan,
-                np.nan,
-                "Unavailable"
-            ]
-        )
+            meta["name"],
+
+            meta["ref"],
+
+            float(
+                df["close"]
+                .iloc[-1]
+            ),
+
+            signal,
+
+            confidence,
+
+            f[0],
+
+            f[2],
+
+            f[3],
+
+            f[1],
+
+            f[4],
+
+            source,
+
+            status,
+
+        ])
+
+    except Exception as e:
+
+        errors[symbol] = str(e)
+
+        rows.append([
+
+            symbol,
+
+            meta["name"],
+
+            meta["ref"],
+
+            np.nan,
+
+            "Unavailable",
+
+            0,
+
+            np.nan,
+
+            np.nan,
+
+            np.nan,
+
+            np.nan,
+
+            np.nan,
+
+            "Unavailable",
+
+            "🔴 Data unavailable",
+
+        ])
+
+
+board = pd.DataFrame(
+
+    rows,
+
+    columns=[
+
+        "Symbol",
+
+        "Asset",
+
+        "Reference",
+
+        "Price",
+
+        "Signal",
+
+        "Confidence",
+
+        "RSI",
+
+        "Momentum %",
+
+        "Trend %",
+
+        "Volume ratio",
+
+        "Volatility %",
+
+        "Data source",
+
+        "Status",
+
+    ],
+)
 
 
 # ============================================================
 # SIGNAL BOARD
 # ============================================================
 
-board = pd.DataFrame(
-    rows,
-    columns=[
-        "Symbol",
-        "Asset",
-        "Reference",
-        "Price",
-        "Signal",
-        "Confidence",
-        "RSI",
-        "Momentum %",
-        "Trend %",
-        "Volume ratio",
-        "Volatility %",
-        "Data source"
-    ]
-)
-
-
 st.subheader(
     f"{category} Signal Board"
 )
 
-
 st.dataframe(
-    board.style.format(
-        {
-            "Price": "{:.6f}",
-            "Confidence": "{:.0f}%",
-            "RSI": "{:.1f}",
-            "Momentum %": "{:.2f}",
-            "Trend %": "{:.2f}",
-            "Volume ratio": "{:.2f}",
-            "Volatility %": "{:.2f}"
-        }
-    ),
+
+    board.style.format({
+
+        "Price":
+            "{:.6f}",
+
+        "Confidence":
+            "{:.0f}%",
+
+        "RSI":
+            "{:.1f}",
+
+        "Momentum %":
+            "{:.2f}",
+
+        "Trend %":
+            "{:.2f}",
+
+        "Volume ratio":
+            "{:.2f}",
+
+        "Volatility %":
+            "{:.2f}",
+
+    }),
+
     use_container_width=True,
-    hide_index=True
+
+    hide_index=True,
 )
 
 
-# ============================================================
-# PRE-LAUNCH NOTICE
-# ============================================================
+if errors:
 
-if category == "TradFi / New Binance Perps":
+    with st.expander(
+        "🔧 Data-source diagnostics"
+    ):
+
+        for symbol, error in (
+            errors.items()
+        ):
+
+            st.write(
+                f"**{symbol}:** "
+                f"{error}"
+            )
+
+
+if category == "Crypto":
 
     st.info(
-        "Pre-launch mode: if a Binance perpetual is "
-        "unavailable, the dashboard analyzes its listed "
-        "HKEX/KRX underlying instead. After launch, it "
-        "automatically switches to Binance contract data."
+        "Crypto data is intentionally "
+        "sourced from CoinCap's aggregated "
+        "market-data service, not Binance."
+    )
+
+
+if (
+    category
+    == "TradFi / New Binance Perps"
+):
+
+    st.info(
+        "If a Binance perpetual is not "
+        "live yet, the dashboard automatically "
+        "analyzes the listed HKEX/KRX underlying. "
+        "When the contract becomes available, "
+        "it switches to Binance data."
     )
 
 
 # ============================================================
-# ASSET INSPECTION
+# INSPECT ASSET
 # ============================================================
 
-available = list(raw)
+available = list(
+    raw.keys()
+)
 
 
 if available:
 
     selected = st.selectbox(
         "Inspect asset",
-        available
+        available,
     )
 
     df = raw[selected]
 
     meta = watch[selected]
 
-    f = features(df)
-
-    signal, confidence = make_signal(
-        f,
-        base_for(selected)
+    f = get_features(
+        df
     )
 
+    signal, confidence = (
+        make_signal(
+            f,
+            base_for(selected),
+        )
+    )
 
-    # Metrics
-    col1, col2, col3, col4, col5 = st.columns(5)
+    c1, c2, c3, c4, c5 = (
+        st.columns(5)
+    )
 
-    col1.metric(
+    c1.metric(
         "Signal",
-        signal
+        signal,
     )
 
-    col2.metric(
+    c2.metric(
         "Confidence",
-        f"{confidence}%"
+        f"{confidence}%",
     )
 
-    col3.metric(
+    c3.metric(
         "RSI",
-        f"{f[0]:.1f}"
+        f"{f[0]:.1f}",
     )
 
-    col4.metric(
+    c4.metric(
         "Momentum",
-        f"{f[2]:.2f}%"
+        f"{f[2]:.2f}%",
     )
 
-    col5.metric(
+    c5.metric(
         "Volatility",
-        f"{f[4]:.2f}%"
+        f"{f[4]:.2f}%",
     )
 
-
-    # Price chart
     st.line_chart(
-        df.set_index("time")["close"],
-        height=320
+        df.set_index(
+            "time"
+        )["close"],
+        height=320,
     )
-
 
     st.caption(
         f"{meta['name']} • "
         f"{meta['ref']} • "
         f"{meta['theme']} • "
-        f"Source: {source_map[selected]}"
+        f"Source: "
+        f"{source_map[selected]}"
     )
-
 
     # ========================================================
     # PAPER OBSERVATION
@@ -1053,173 +1556,183 @@ if available:
         [
             "Bullish",
             "Neutral",
-            "Bearish"
+            "Bearish",
         ],
-        horizontal=True
+        horizontal=True,
     )
 
     note = st.text_input(
         "Reason / note",
         placeholder=(
             "e.g. positive momentum + "
-            "volume confirmation"
-        )
+            "trend confirmation"
+        ),
     )
-
 
     if st.button(
         "Record paper observation"
     ):
 
-        st.session_state.paper.append(
-            {
-                "Time":
-                    datetime.now(
-                        timezone.utc
-                    ).strftime(
-                        "%Y-%m-%d %H:%M:%S UTC"
-                    ),
+        observation = {
 
-                "Category":
-                    category,
+            "symbol":
+                selected,
 
-                "Symbol":
-                    selected,
+            "category":
+                category,
 
-                "Price":
-                    float(
-                        df["close"].iloc[-1]
-                    ),
+            "price":
+                float(
+                    df["close"]
+                    .iloc[-1]
+                ),
 
-                "Signal":
-                    signal,
+            "signal":
+                signal,
 
-                "Confidence":
-                    confidence,
+            "confidence":
+                int(
+                    confidence
+                ),
 
-                "Observation":
-                    direction,
+            "observation":
+                direction,
 
-                "Note":
-                    note
-            }
+            "note":
+                note,
+
+            "created_at":
+                datetime.now(
+                    timezone.utc
+                ).isoformat(),
+
+        }
+
+        ok, message = (
+            save_history(
+                observation
+            )
         )
 
-        st.success(
-            "Paper observation recorded."
-        )
+        if ok:
 
+            st.success(
+                "Paper observation "
+                "saved permanently."
+            )
+
+        else:
+
+            st.warning(
+                "It was not saved "
+                "permanently. "
+                + message
+            )
 
 else:
 
     st.warning(
-        "No market data is currently "
-        "available for this watchlist."
+        "No market data is "
+        "currently available."
     )
 
 
 # ============================================================
-# PAPER-PREDICTION ACCURACY
+# PERSISTENT HISTORY
 # ============================================================
 
 st.subheader(
-    "📈 Paper-Prediction Accuracy"
+    "📈 Persistent Paper-Prediction History"
 )
 
+history = load_history()
 
-if st.session_state.paper:
 
-    history = pd.DataFrame(
-        st.session_state.paper
+if history:
+
+    history_df = pd.DataFrame(
+        history
     )
 
     results = []
 
+    for _, row in (
+        history_df.iterrows()
+    ):
 
-    for _, row in history.iterrows():
+        current_price = np.nan
 
-        try:
+        move = np.nan
 
-            symbol = row["Symbol"]
+        result = "Pending"
 
+        symbol = row.get(
+            "symbol"
+        )
 
-            if symbol in raw:
+        if symbol in raw:
 
-                current_price = float(
-                    raw[symbol]["close"].iloc[-1]
+            current_price = float(
+                raw[symbol]
+                ["close"]
+                .iloc[-1]
+            )
+
+            recorded_price = float(
+                row["price"]
+            )
+
+            move = (
+                current_price
+                / recorded_price
+                - 1
+            ) * 100
+
+            if (
+                row["observation"]
+                == "Bullish"
+            ):
+
+                correct = (
+                    move > 0
                 )
 
-                recorded_price = float(
-                    row["Price"]
+            elif (
+                row["observation"]
+                == "Bearish"
+            ):
+
+                correct = (
+                    move < 0
                 )
-
-                correct = direction_correct(
-                    row["Observation"],
-                    current_price,
-                    recorded_price
-                )
-
-                price_change = (
-                    current_price
-                    / recorded_price
-                    - 1
-                ) * 100
-
-
-                results.append(
-                    {
-                        **row.to_dict(),
-
-                        "Current price":
-                            current_price,
-
-                        "Move since observation %":
-                            price_change,
-
-                        "Result":
-                            (
-                                "Correct"
-                                if correct
-                                else "Incorrect"
-                            )
-                    }
-                )
-
 
             else:
 
-                results.append(
-                    {
-                        **row.to_dict(),
-
-                        "Current price":
-                            np.nan,
-
-                        "Move since observation %":
-                            np.nan,
-
-                        "Result":
-                            "Pending"
-                    }
+                correct = (
+                    abs(move)
+                    < 0.50
                 )
 
-
-        except Exception:
-
-            results.append(
-                {
-                    **row.to_dict(),
-
-                    "Current price":
-                        np.nan,
-
-                    "Move since observation %":
-                        np.nan,
-
-                    "Result":
-                        "Pending"
-                }
+            result = (
+                "Correct"
+                if correct
+                else "Incorrect"
             )
+
+        results.append({
+
+            **row.to_dict(),
+
+            "current_price":
+                current_price,
+
+            "move_since_observation_%":
+                move,
+
+            "result":
+                result,
+
+        })
 
 
     result_df = pd.DataFrame(
@@ -1228,77 +1741,124 @@ if st.session_state.paper:
 
 
     scored = result_df[
-        result_df["Result"].isin(
+        result_df[
+            "result"
+        ].isin(
             [
                 "Correct",
-                "Incorrect"
+                "Incorrect",
             ]
         )
     ]
 
 
+    a, b, c = (
+        st.columns(3)
+    )
+
+
+    a.metric(
+        "Total observations",
+        len(result_df),
+    )
+
+
     if len(scored):
 
         accuracy = (
-            scored["Result"]
+            scored["result"]
             == "Correct"
         ).mean() * 100
 
-
-        col1, col2, col3 = st.columns(3)
-
-
-        col1.metric(
-            "Scored observations",
-            len(scored)
+        b.metric(
+            "Observed hit rate",
+            f"{accuracy:.1f}%",
         )
 
+    else:
 
-        col2.metric(
-            "Model hit rate",
-            f"{accuracy:.1f}%"
-        )
-
-
-        col3.metric(
+        b.metric(
+            "Observed hit rate",
             "Pending",
-            int(
-                (
-                    result_df["Result"]
-                    == "Pending"
-                ).sum()
-            )
         )
+
+
+    c.metric(
+        "Pending",
+        int(
+            (
+                result_df[
+                    "result"
+                ]
+                == "Pending"
+            ).sum()
+        ),
+    )
 
 
     st.dataframe(
         result_df,
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
     )
 
 
-    # CSV export
     st.download_button(
-        "⬇️ Download Paper History CSV",
+
+        "⬇️ Download paper history CSV",
+
         result_df.to_csv(
             index=False
         ),
+
         "paper_prediction_history.csv",
-        "text/csv"
+
+        "text/csv",
     )
+
+
+    if st.button(
+        "Delete all persistent paper history"
+    ):
+
+        ok, message = (
+            delete_history()
+        )
+
+        if ok:
+
+            st.success(
+                message
+            )
+
+            st.rerun()
+
+        else:
+
+            st.error(
+                message
+            )
 
 
 else:
 
-    st.info(
-        "Record paper observations to start "
-        "measuring model accuracy."
-    )
+    if supabase_ready():
+
+        st.info(
+            "No persistent paper "
+            "observations recorded yet."
+        )
+
+    else:
+
+        st.warning(
+            "Persistent history is "
+            "not configured yet."
+        )
 
 
 # ============================================================
-# LAST REFRESH
+# REFRESH TIME
 # ============================================================
 
 st.caption(
