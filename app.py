@@ -6,27 +6,55 @@ import os
 from datetime import datetime, timezone
 
 # ============================================================
-# AI MARKET INTELLIGENCE v4.2
-# CoinGecko crypto data + Yahoo Finance + Binance fallback
-# Read-only / paper-analysis dashboard
+# AI MARKET INTELLIGENCE v4.3
+# ============================================================
+# DATA SOURCES
+# 1. CoinGecko       -> Crypto
+# 2. Yahoo Finance   -> US stocks / ETFs
+# 3. Binance         -> Existing six contracts
+# 4. NGX Pulse       -> Nigerian Exchange stocks
+#
+# READ-ONLY / PAPER ANALYSIS
+# NO REAL ORDERS ARE EXECUTED
 # ============================================================
 
 st.set_page_config(
-    page_title="AI Market Intelligence v4.2",
+    page_title="AI Market Intelligence v4.3",
     page_icon="🤖",
     layout="wide",
 )
 
 # ============================================================
-# CONFIG
+# API BASE URLS
 # ============================================================
 
-COINGECKO_PUBLIC_BASE = "https://api.coingecko.com/api/v3"
-COINGECKO_DEMO_BASE = "https://api.coingecko.com/api/v3"
-COINGECKO_PRO_BASE = "https://pro-api.coingecko.com/api/v3"
+COINGECKO_PUBLIC_BASE = (
+    "https://api.coingecko.com/api/v3"
+)
 
-YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
-BINANCE_BASE = "https://api.binance.com/api/v3"
+COINGECKO_DEMO_BASE = (
+    "https://api.coingecko.com/api/v3"
+)
+
+COINGECKO_PRO_BASE = (
+    "https://pro-api.coingecko.com/api/v3"
+)
+
+YAHOO_BASE = (
+    "https://query1.finance.yahoo.com/v8/finance/chart"
+)
+
+BINANCE_BASE = (
+    "https://api.binance.com/api/v3"
+)
+
+NGXPULSE_BASE = (
+    "https://www.ngxpulse.ng"
+)
+
+# ============================================================
+# EXISTING SIX ASSETS
+# ============================================================
 
 TRADFI = {
     "ZHONGJIUSDT": {
@@ -35,30 +63,35 @@ TRADFI = {
         "theme": "AI optical infrastructure",
         "underlying": "3308.HK",
     },
+
     "HANMIUSDT": {
         "name": "Hanmi Semiconductor",
         "ref": "KRX 042700",
         "theme": "HBM / semiconductor equipment",
         "underlying": "042700.KS",
     },
+
     "SAMSUNGEMUSDT": {
         "name": "Samsung Electro-Mechanics",
         "ref": "KRX 009150",
         "theme": "AI components / MLCC",
         "underlying": "009150.KS",
     },
+
     "LGELECTRONICSUSDT": {
         "name": "LG Electronics",
         "ref": "KRX 066570",
         "theme": "Electronics / data-center cooling",
         "underlying": "066570.KS",
     },
+
     "NAVERUSDT": {
         "name": "NAVER",
         "ref": "KRX 035420",
         "theme": "AI / cloud / internet",
         "underlying": "035420.KS",
     },
+
     "KODEX200USDT": {
         "name": "Samsung KODEX 200 ETF",
         "ref": "KRX 069500",
@@ -66,6 +99,10 @@ TRADFI = {
         "underlying": "069500.KS",
     },
 }
+
+# ============================================================
+# CRYPTO
+# ============================================================
 
 CRYPTO = {
     "BTCUSDT": ("Bitcoin", "bitcoin"),
@@ -77,6 +114,10 @@ CRYPTO = {
     "LINKUSDT": ("Chainlink", "chainlink"),
     "AVAXUSDT": ("Avalanche", "avalanche"),
 }
+
+# ============================================================
+# US STOCKS
+# ============================================================
 
 US_STOCKS = {
     "NVDA": ("NVIDIA", "NASDAQ", "AI accelerators / data centers"),
@@ -90,10 +131,18 @@ US_STOCKS = {
     "AAPL": ("Apple", "NASDAQ", "Consumer tech / AI"),
 }
 
+# ============================================================
+# ETFs
+# ============================================================
+
 ETFS = {
     "QQQ": ("Invesco QQQ", "NASDAQ", "Nasdaq-100"),
     "SPY": ("SPDR S&P 500 ETF", "NYSE Arca", "S&P 500"),
 }
+
+# ============================================================
+# DEFAULT AI SCORES
+# ============================================================
 
 BASE_SCORE = {
     "ZHONGJIUSDT": 68,
@@ -127,14 +176,116 @@ BASE_SCORE = {
 }
 
 # ============================================================
+# NGX WATCHLIST
+# ============================================================
+
+NGX_WATCHLIST = {
+    "DANGCEM": (
+        "Dangote Cement Plc",
+        "Industrial Goods",
+        "Cement / Infrastructure",
+    ),
+
+    "GTCO": (
+        "Guaranty Trust Holding Company",
+        "Financial Services",
+        "Banking",
+    ),
+
+    "ZENITHBANK": (
+        "Zenith Bank Plc",
+        "Financial Services",
+        "Banking",
+    ),
+
+    "ACCESSCORP": (
+        "Access Holdings Plc",
+        "Financial Services",
+        "Banking",
+    ),
+
+    "UBA": (
+        "United Bank for Africa Plc",
+        "Financial Services",
+        "Banking",
+    ),
+
+    "FIRSTHOLDCO": (
+        "First HoldCo Plc",
+        "Financial Services",
+        "Banking",
+    ),
+
+    "MTNN": (
+        "MTN Nigeria Communications Plc",
+        "ICT",
+        "Telecommunications",
+    ),
+
+    "AIRTELAFRI": (
+        "Airtel Africa Plc",
+        "ICT",
+        "Telecommunications",
+    ),
+
+    "BUAFOODS": (
+        "BUA Foods Plc",
+        "Consumer Goods",
+        "Food / Consumer",
+    ),
+
+    "BUACEMENT": (
+        "BUA Cement Plc",
+        "Industrial Goods",
+        "Cement",
+    ),
+
+    "SEPLAT": (
+        "Seplat Energy Plc",
+        "Oil & Gas",
+        "Energy",
+    ),
+
+    "ARADEL": (
+        "Aradel Holdings Plc",
+        "Oil & Gas",
+        "Energy",
+    ),
+
+    "PRESCO": (
+        "Presco Plc",
+        "Agriculture",
+        "Agro-industrial",
+    ),
+
+    "NB": (
+        "Nigerian Breweries Plc",
+        "Consumer Goods",
+        "Brewing",
+    ),
+
+    "FLOURMILL": (
+        "Flour Mills of Nigeria Plc",
+        "Consumer Goods",
+        "Food",
+    ),
+}
+
+# ============================================================
 # SECRETS
 # ============================================================
 
 def get_secret(name, default=""):
     try:
-        return st.secrets.get(name, default)
+        return st.secrets.get(
+            name,
+            default,
+        )
     except Exception:
-        return os.getenv(name, default)
+        return os.getenv(
+            name,
+            default,
+        )
 
 
 SUPABASE_URL = get_secret(
@@ -153,6 +304,10 @@ COINGECKO_PRO_API_KEY = get_secret(
     "COINGECKO_PRO_API_KEY"
 )
 
+NGXPULSE_API_KEY = get_secret(
+    "NGXPULSE_API_KEY"
+)
+
 # ============================================================
 # SESSION STATE
 # ============================================================
@@ -164,12 +319,8 @@ if "custom_assets" not in st.session_state:
     st.session_state.custom_assets = []
 
 # ============================================================
-# API DIAGNOSTICS
+# DIAGNOSTICS
 # ============================================================
-
-def reset_api_diagnostics():
-    st.session_state.api_diagnostics = []
-
 
 def record_api_diagnostic(
     service,
@@ -180,26 +331,32 @@ def record_api_diagnostic(
     response="",
 ):
     st.session_state.api_diagnostics.append({
-        "time_utc": datetime.now(
-            timezone.utc
-        ).strftime("%Y-%m-%d %H:%M:%S"),
+        "time_utc":
+            datetime.now(
+                timezone.utc
+            ).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
 
-        "service": service,
+        "service":
+            service,
 
-        "http_status": status_code,
+        "http_status":
+            status_code,
 
-        "status": (
-            "OK"
-            if ok
-            else "ERROR"
-        ),
+        "status":
+            "OK" if ok else "ERROR",
 
-        "endpoint": endpoint,
+        "endpoint":
+            endpoint,
 
-        "message": message,
+        "message":
+            message,
 
-        "response": str(response)[:500],
+        "response":
+            str(response)[:500],
     })
+
 
 # ============================================================
 # SUPABASE
@@ -215,11 +372,15 @@ def supabase_ready():
 def supabase_headers():
     return {
         "apikey": SUPABASE_KEY,
-        "Authorization": (
-            f"Bearer {SUPABASE_KEY}"
-        ),
-        "Content-Type": "application/json",
-        "Prefer": "return=representation",
+
+        "Authorization":
+            f"Bearer {SUPABASE_KEY}",
+
+        "Content-Type":
+            "application/json",
+
+        "Prefer":
+            "return=representation",
     }
 
 
@@ -230,7 +391,6 @@ def load_history():
         return []
 
     try:
-
         r = requests.get(
             f"{SUPABASE_URL}/rest/v1/"
             "paper_observations",
@@ -239,7 +399,8 @@ def load_history():
 
             params={
                 "select": "*",
-                "order": "created_at.desc",
+                "order":
+                    "created_at.desc",
             },
 
             timeout=10,
@@ -256,14 +417,12 @@ def load_history():
 def save_history(row):
 
     if not supabase_ready():
-
         return (
             False,
-            "Supabase is not configured."
+            "Supabase is not configured.",
         )
 
     try:
-
         r = requests.post(
             f"{SUPABASE_URL}/rest/v1/"
             "paper_observations",
@@ -289,14 +448,12 @@ def save_history(row):
 def delete_history():
 
     if not supabase_ready():
-
         return (
             False,
-            "Supabase is not configured."
+            "Supabase is not configured.",
         )
 
     try:
-
         r = requests.delete(
             f"{SUPABASE_URL}/rest/v1/"
             "paper_observations",
@@ -304,7 +461,7 @@ def delete_history():
             headers=supabase_headers(),
 
             params={
-                "id": "not.is.null"
+                "id": "not.is.null",
             },
 
             timeout=10,
@@ -320,8 +477,9 @@ def delete_history():
 
         return False, str(e)
 
+
 # ============================================================
-# COINGECKO CONFIGURATION
+# COINGECKO
 # ============================================================
 
 def coingecko_config():
@@ -359,10 +517,6 @@ def coingecko_config():
     )
 
 
-# ============================================================
-# COINGECKO REQUEST
-# ============================================================
-
 def coingecko_request(
     path,
     params=None,
@@ -378,100 +532,62 @@ def coingecko_request(
 
     try:
 
-        response = requests.get(
+        r = requests.get(
             endpoint,
             headers=headers,
             params=params or {},
             timeout=15,
         )
 
-        preview = response.text[:500]
+        preview = r.text[:500]
 
-        if response.ok:
+        if r.ok:
 
-            try:
-
-                payload = response.json()
-
-            except ValueError:
-
-                message = (
-                    "CoinGecko returned HTTP "
-                    "success but the response "
-                    "was not valid JSON."
-                )
-
-                record_api_diagnostic(
-                    plan,
-                    response.url,
-                    response.status_code,
-                    False,
-                    message,
-                    preview,
-                )
-
-                return None, message
+            data = r.json()
 
             record_api_diagnostic(
                 plan,
-                response.url,
-                response.status_code,
+                r.url,
+                r.status_code,
                 True,
                 "Request succeeded.",
                 preview,
             )
 
-            return payload, ""
+            return data, ""
 
-        if response.status_code == 401:
-
+        if r.status_code == 401:
             message = (
-                "401 Unauthorized: the "
-                "CoinGecko API key is "
+                "401: CoinGecko API key "
                 "missing or invalid."
             )
 
-        elif response.status_code == 403:
-
+        elif r.status_code == 403:
             message = (
-                "403 Forbidden: the selected "
-                "CoinGecko endpoint or API "
-                "key is not permitted."
+                "403: CoinGecko access denied."
             )
 
-        elif response.status_code == 404:
-
+        elif r.status_code == 404:
             message = (
-                "404 Not Found: check the "
-                "CoinGecko coin ID or endpoint."
+                "404: CoinGecko asset/endpoint "
+                "not found."
             )
 
-        elif response.status_code == 429:
-
+        elif r.status_code == 429:
             message = (
-                "429 Too Many Requests: "
-                "CoinGecko rate limit reached. "
-                "Wait and retry."
-            )
-
-        elif response.status_code >= 500:
-
-            message = (
-                f"{response.status_code}: "
-                "CoinGecko server error."
+                "429: CoinGecko rate limit reached."
             )
 
         else:
-
             message = (
-                f"CoinGecko returned HTTP "
-                f"{response.status_code}."
+                f"CoinGecko HTTP "
+                f"{r.status_code}."
             )
 
         record_api_diagnostic(
             plan,
-            response.url,
-            response.status_code,
+            r.url,
+            r.status_code,
             False,
             message,
             preview,
@@ -479,241 +595,57 @@ def coingecko_request(
 
         return None, message
 
-    except requests.exceptions.Timeout:
-
-        message = (
-            "Connection timed out after "
-            "15 seconds."
-        )
-
-        record_api_diagnostic(
-            plan,
-            endpoint,
-            None,
-            False,
-            message,
-        )
-
-        return None, message
-
-    except requests.exceptions.ConnectionError as e:
-
-        message = (
-            "Connection error while contacting "
-            f"CoinGecko: {e}"
-        )
-
-        record_api_diagnostic(
-            plan,
-            endpoint,
-            None,
-            False,
-            message,
-        )
-
-        return None, message
-
     except Exception as e:
 
-        message = (
-            f"Unexpected CoinGecko error: {e}"
-        )
-
         record_api_diagnostic(
             plan,
             endpoint,
             None,
             False,
-            message,
+            str(e),
         )
-
-        return None, message
-
-
-# ============================================================
-# COINGECKO COIN LIST
-# ============================================================
-
-@st.cache_data(ttl=300)
-def coingecko_coin_list():
-
-    payload, error = (
-        coingecko_request(
-            "/coins/list",
-            {
-                "include_platform":
-                    "false"
-            },
-        )
-    )
-
-    if not payload:
-
-        raise RuntimeError(
-            error
-            or
-            "CoinGecko returned no coin list."
-        )
-
-    return payload
-
-
-# ============================================================
-# FIND COINGECKO ASSET
-# ============================================================
-
-@st.cache_data(ttl=120)
-def coingecko_find_asset(query):
-
-    query = query.strip().lower()
-
-    payload, error = (
-        coingecko_request(
-            f"/coins/{query}",
-
-            {
-                "localization": "false",
-                "tickers": "false",
-                "market_data": "true",
-                "community_data": "false",
-                "developer_data": "false",
-            },
-        )
-    )
-
-    if payload and payload.get("id"):
-
-        return payload, ""
-
-    try:
-
-        assets = (
-            coingecko_coin_list()
-        )
-
-    except Exception as e:
 
         return None, str(e)
 
-    exact = []
-
-    for asset in assets:
-
-        asset_id = str(
-            asset.get("id", "")
-        ).lower()
-
-        symbol = str(
-            asset.get("symbol", "")
-        ).lower()
-
-        name = str(
-            asset.get("name", "")
-        ).lower()
-
-        if query in {
-            asset_id,
-            symbol,
-            name,
-        }:
-
-            exact.append(asset)
-
-    if exact:
-
-        return exact[0], ""
-
-    partial = []
-
-    for asset in assets:
-
-        asset_id = str(
-            asset.get("id", "")
-        ).lower()
-
-        symbol = str(
-            asset.get("symbol", "")
-        ).lower()
-
-        name = str(
-            asset.get("name", "")
-        ).lower()
-
-        if (
-            query in asset_id
-            or query in symbol
-            or query in name
-        ):
-
-            partial.append(asset)
-
-    if partial:
-
-        return partial[0], ""
-
-    return None, (
-        f"No CoinGecko coin matched "
-        f"'{query}'."
-    )
-
-
-# ============================================================
-# COINGECKO HISTORICAL DATA
-# ============================================================
 
 @st.cache_data(ttl=60)
 def coingecko_history(
     asset_id,
-    interval="15m",
+    interval,
 ):
 
-    if interval in [
-        "5m",
-        "15m",
-    ]:
-
-        days = 1
-
-    else:
-
-        days = 7
-
-    payload, error = (
-        coingecko_request(
-            f"/coins/{asset_id}/"
-            "market_chart",
-
-            {
-                "vs_currency": "usd",
-                "days": days,
-            },
-        )
+    days = (
+        1
+        if interval in ["5m", "15m"]
+        else 7
     )
 
-    if not payload:
+    data, error = coingecko_request(
+        f"/coins/{asset_id}/market_chart",
+        {
+            "vs_currency": "usd",
+            "days": days,
+        },
+    )
 
+    if not data:
         raise RuntimeError(
             error
-            or
-            "CoinGecko returned no "
-            "historical data."
         )
 
-    prices = payload.get(
+    prices = data.get(
         "prices",
-        []
+        [],
     )
 
-    volumes = payload.get(
+    volumes = data.get(
         "total_volumes",
-        []
+        [],
     )
 
     if not prices:
-
         raise RuntimeError(
-            f"No price history returned "
-            f"for '{asset_id}'."
+            "CoinGecko returned no price data."
         )
 
     df = pd.DataFrame(
@@ -730,44 +662,27 @@ def coingecko_history(
         utc=True,
     )
 
-    df["close"] = pd.to_numeric(
-        df["close"],
-        errors="coerce",
-    )
-
     if volumes:
 
         volume_df = pd.DataFrame(
             volumes,
             columns=[
-                "volume_time_ms",
+                "time_ms",
                 "volume",
             ],
         )
 
         volume_df["time"] = pd.to_datetime(
-            volume_df[
-                "volume_time_ms"
-            ],
+            volume_df["time_ms"],
             unit="ms",
             utc=True,
         )
 
-        volume_df["volume"] = pd.to_numeric(
-            volume_df["volume"],
-            errors="coerce",
-        )
-
-        volume_df = volume_df[
-            [
-                "time",
-                "volume",
-            ]
-        ]
-
         df = pd.merge_asof(
             df.sort_values("time"),
-            volume_df.sort_values("time"),
+            volume_df[
+                ["time", "volume"]
+            ].sort_values("time"),
             on="time",
             direction="nearest",
         )
@@ -776,45 +691,23 @@ def coingecko_history(
 
         df["volume"] = np.nan
 
-    # Build simple OHLC from price points.
     df["open"] = (
         df["close"].shift(1)
     )
 
     df["high"] = df[
-        [
-            "open",
-            "close",
-        ]
+        ["open", "close"]
     ].max(axis=1)
 
     df["low"] = df[
-        [
-            "open",
-            "close",
-        ]
+        ["open", "close"]
     ].min(axis=1)
-
-    df = (
-        df[
-            [
-                "time",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-            ]
-        ]
-        .dropna(
-            subset=["close"]
-        )
-        .set_index("time")
-    )
 
     if interval == "15m":
 
-        df = df.resample(
+        df = df.set_index(
+            "time"
+        ).resample(
             "15min"
         ).agg({
             "open": "first",
@@ -822,11 +715,15 @@ def coingecko_history(
             "low": "min",
             "close": "last",
             "volume": "sum",
-        })
+        }).dropna(
+            subset=["close"]
+        ).reset_index()
 
     elif interval == "1h":
 
-        df = df.resample(
+        df = df.set_index(
+            "time"
+        ).resample(
             "1h"
         ).agg({
             "open": "first",
@@ -834,22 +731,9 @@ def coingecko_history(
             "low": "min",
             "close": "last",
             "volume": "sum",
-        })
-
-    df = (
-        df
-        .dropna(
+        }).dropna(
             subset=["close"]
-        )
-        .reset_index()
-    )
-
-    if len(df) < 10:
-
-        raise RuntimeError(
-            "CoinGecko returned too few "
-            "data points for the signal model."
-        )
+        ).reset_index()
 
     return df
 
@@ -866,10 +750,7 @@ def yahoo_history(
 
     yahoo_interval = (
         "15m"
-        if interval in [
-            "5m",
-            "15m",
-        ]
+        if interval in ["5m", "15m"]
         else "1h"
     )
 
@@ -883,8 +764,10 @@ def yahoo_history(
 
         params={
             "range": "5d",
-            "interval": yahoo_interval,
-            "events": "history",
+            "interval":
+                yahoo_interval,
+            "events":
+                "history",
         },
 
         timeout=15,
@@ -892,27 +775,15 @@ def yahoo_history(
 
     r.raise_for_status()
 
-    payload = r.json()
-
     result = (
-        payload
+        r.json()
         .get("chart", {})
         .get("result")
     )
 
     if not result:
-
-        error = (
-            payload
-            .get("chart", {})
-            .get("error")
-        )
-
         raise RuntimeError(
-            str(error)
-            if error
-            else
-            "Yahoo returned no data."
+            "Yahoo Finance returned no data."
         )
 
     result = result[0]
@@ -923,37 +794,35 @@ def yahoo_history(
         .get("quote", [{}])[0]
     )
 
-    timestamps = result.get(
-        "timestamp",
-        []
-    )
-
     df = pd.DataFrame({
-        "time": pd.to_datetime(
-            timestamps,
-            unit="s",
-            utc=True,
-        ),
+        "time":
+            pd.to_datetime(
+                result.get(
+                    "timestamp",
+                    [],
+                ),
+                unit="s",
+                utc=True,
+            ),
 
-        "open": quote.get("open"),
+        "open":
+            quote.get("open"),
 
-        "high": quote.get("high"),
+        "high":
+            quote.get("high"),
 
-        "low": quote.get("low"),
+        "low":
+            quote.get("low"),
 
-        "close": quote.get("close"),
+        "close":
+            quote.get("close"),
 
-        "volume": quote.get("volume"),
+        "volume":
+            quote.get("volume"),
     })
 
-    return (
-        df
-        .dropna(
-            subset=["close"]
-        )
-        .reset_index(
-            drop=True
-        )
+    return df.dropna(
+        subset=["close"]
     )
 
 
@@ -964,7 +833,7 @@ def yahoo_history(
 @st.cache_data(ttl=30)
 def binance_klines(
     symbol,
-    interval="5m",
+    interval="15m",
     limit=200,
 ):
 
@@ -972,9 +841,14 @@ def binance_klines(
         f"{BINANCE_BASE}/klines",
 
         params={
-            "symbol": symbol,
-            "interval": interval,
-            "limit": limit,
+            "symbol":
+                symbol,
+
+            "interval":
+                interval,
+
+            "limit":
+                limit,
         },
 
         timeout=10,
@@ -988,15 +862,12 @@ def binance_klines(
         data,
         list,
     ):
-
         raise RuntimeError(
-            "Binance returned no "
-            "candle data."
+            "Binance returned no candle data."
         )
 
     df = pd.DataFrame(
         data,
-
         columns=[
             "open_time",
             "open",
@@ -1036,14 +907,511 @@ def binance_klines(
 
 
 # ============================================================
+# NGX PULSE
+# ============================================================
+
+def ngx_headers():
+
+    return {
+        "X-API-Key":
+            NGXPULSE_API_KEY,
+
+        "Content-Type":
+            "application/json",
+
+        "User-Agent":
+            "AI-Market-Intelligence-v4.3",
+    }
+
+
+def ngx_ready():
+    return bool(
+        NGXPULSE_API_KEY
+    )
+
+
+def ngx_request(
+    path,
+    params=None,
+):
+
+    endpoint = (
+        f"{NGXPULSE_BASE}{path}"
+    )
+
+    if not ngx_ready():
+
+        message = (
+            "NGX Pulse API key is missing. "
+            "Add NGXPULSE_API_KEY to "
+            "Streamlit Secrets."
+        )
+
+        record_api_diagnostic(
+            "NGX Pulse",
+            endpoint,
+            None,
+            False,
+            message,
+        )
+
+        return None, message
+
+    try:
+
+        r = requests.get(
+            endpoint,
+            headers=ngx_headers(),
+            params=params or {},
+            timeout=15,
+        )
+
+        preview = r.text[:500]
+
+        if r.ok:
+
+            try:
+                data = r.json()
+
+            except ValueError:
+
+                message = (
+                    "NGX Pulse returned HTTP "
+                    "success but invalid JSON."
+                )
+
+                record_api_diagnostic(
+                    "NGX Pulse",
+                    r.url,
+                    r.status_code,
+                    False,
+                    message,
+                    preview,
+                )
+
+                return None, message
+
+            record_api_diagnostic(
+                "NGX Pulse",
+                r.url,
+                r.status_code,
+                True,
+                "NGX request succeeded.",
+                preview,
+            )
+
+            return data, ""
+
+        if r.status_code == 401:
+
+            message = (
+                "401 Unauthorized: NGXPULSE_API_KEY "
+                "is missing or invalid."
+            )
+
+        elif r.status_code == 403:
+
+            message = (
+                "403 Forbidden: your NGX Pulse "
+                "API tier does not permit this endpoint."
+            )
+
+        elif r.status_code == 404:
+
+            message = (
+                "404: NGX ticker or endpoint "
+                "was not found."
+            )
+
+        elif r.status_code == 429:
+
+            message = (
+                "429: NGX Pulse rate limit reached."
+            )
+
+        elif r.status_code >= 500:
+
+            message = (
+                f"{r.status_code}: NGX Pulse "
+                "server error."
+            )
+
+        else:
+
+            message = (
+                f"NGX Pulse returned HTTP "
+                f"{r.status_code}."
+            )
+
+        record_api_diagnostic(
+            "NGX Pulse",
+            r.url,
+            r.status_code,
+            False,
+            message,
+            preview,
+        )
+
+        return None, message
+
+    except requests.exceptions.Timeout:
+
+        message = (
+            "NGX Pulse request timed out."
+        )
+
+        record_api_diagnostic(
+            "NGX Pulse",
+            endpoint,
+            None,
+            False,
+            message,
+        )
+
+        return None, message
+
+    except requests.exceptions.ConnectionError:
+
+        message = (
+            "Could not connect to NGX Pulse."
+        )
+
+        record_api_diagnostic(
+            "NGX Pulse",
+            endpoint,
+            None,
+            False,
+            message,
+        )
+
+        return None, message
+
+    except Exception as e:
+
+        record_api_diagnostic(
+            "NGX Pulse",
+            endpoint,
+            None,
+            False,
+            str(e),
+        )
+
+        return None, str(e)
+
+
+# ============================================================
+# NGX ALL STOCKS
+# ============================================================
+
+@st.cache_data(ttl=300)
+def ngx_all_stocks():
+
+    data, error = ngx_request(
+        "/api/ngxdata/stocks"
+    )
+
+    if not data:
+
+        raise RuntimeError(
+            error
+        )
+
+    if isinstance(
+        data,
+        dict,
+    ):
+
+        stocks = (
+            data.get(
+                "data"
+            )
+            or data.get(
+                "stocks"
+            )
+            or []
+        )
+
+    else:
+
+        stocks = data
+
+    if not stocks:
+
+        raise RuntimeError(
+            "NGX Pulse returned an empty "
+            "stock list."
+        )
+
+    return stocks
+
+
+# ============================================================
+# NGX HISTORICAL PRICES
+# ============================================================
+
+@st.cache_data(ttl=120)
+def ngx_history(
+    symbol,
+    days=60,
+):
+
+    data, error = ngx_request(
+        f"/api/ngxdata/prices/"
+        f"{symbol}",
+        {
+            "days":
+                days,
+        },
+    )
+
+    if not data:
+
+        raise RuntimeError(
+            error
+        )
+
+    # API can return the history directly
+    # or inside a data/history object.
+
+    history = []
+
+    if isinstance(
+        data,
+        dict,
+    ):
+
+        history = (
+            data.get(
+                "history"
+            )
+            or data.get(
+                "data"
+            )
+            or []
+        )
+
+        # Handle a single snapshot.
+        if (
+            not history
+            and
+            data.get(
+                "current_price"
+            ) is not None
+        ):
+
+            history = [data]
+
+    elif isinstance(
+        data,
+        list,
+    ):
+
+        history = data
+
+    if not history:
+
+        raise RuntimeError(
+            "NGX Pulse returned no historical "
+            f"data for {symbol}."
+        )
+
+    df = pd.DataFrame(
+        history
+    )
+
+    # Normalize common NGX Pulse fields.
+
+    date_col = None
+
+    for candidate in [
+        "date",
+        "trade_date",
+        "timestamp",
+        "time",
+    ]:
+
+        if candidate in df.columns:
+
+            date_col = candidate
+
+            break
+
+    if date_col is None:
+
+        raise RuntimeError(
+            "NGX historical response did not "
+            "contain a date field."
+        )
+
+    price_col = None
+
+    for candidate in [
+        "close",
+        "current_price",
+        "price",
+        "close_price",
+    ]:
+
+        if candidate in df.columns:
+
+            price_col = candidate
+
+            break
+
+    if price_col is None:
+
+        raise RuntimeError(
+            "NGX historical response did not "
+            "contain a price field."
+        )
+
+    df["time"] = pd.to_datetime(
+        df[date_col],
+        errors="coerce",
+        utc=True,
+    )
+
+    df["close"] = pd.to_numeric(
+        df[price_col],
+        errors="coerce",
+    )
+
+    # NGX daily data does not necessarily
+    # provide OHLCV in every response.
+    # Construct compatible columns.
+
+    for col in [
+        "open",
+        "high",
+        "low",
+        "volume",
+    ]:
+
+        if col not in df.columns:
+
+            df[col] = np.nan
+
+    df["open"] = pd.to_numeric(
+        df["open"],
+        errors="coerce",
+    )
+
+    df["high"] = pd.to_numeric(
+        df["high"],
+        errors="coerce",
+    )
+
+    df["low"] = pd.to_numeric(
+        df["low"],
+        errors="coerce",
+    )
+
+    df["volume"] = pd.to_numeric(
+        df["volume"],
+        errors="coerce",
+    )
+
+    df["open"] = (
+        df["open"]
+        .fillna(
+            df["close"].shift(1)
+        )
+    )
+
+    df["high"] = (
+        df["high"]
+        .fillna(
+            df[
+                ["open", "close"]
+            ].max(axis=1)
+        )
+    )
+
+    df["low"] = (
+        df["low"]
+        .fillna(
+            df[
+                ["open", "close"]
+            ].min(axis=1)
+        )
+    )
+
+    df = df[
+        [
+            "time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+        ]
+    ]
+
+    df = (
+        df
+        .dropna(
+            subset=["time", "close"]
+        )
+        .sort_values("time")
+        .drop_duplicates(
+            subset=["time"]
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+
+    if len(df) < 10:
+
+        raise RuntimeError(
+            f"Only {len(df)} NGX price points "
+            "were returned; at least 10 are "
+            "needed for the signal model."
+        )
+
+    return df
+
+
+# ============================================================
+# NGX MARKET OVERVIEW
+# ============================================================
+
+@st.cache_data(ttl=120)
+def ngx_market_overview():
+
+    data, error = ngx_request(
+        "/api/ngxdata/market"
+    )
+
+    if not data:
+
+        return None, error
+
+    if isinstance(
+        data,
+        dict,
+    ):
+
+        return (
+            data.get(
+                "data",
+                data,
+            ),
+            "",
+        )
+
+    return data, ""
+
+
+# ============================================================
 # TECHNICAL FEATURES
 # ============================================================
 
 def get_features(df):
 
-    close = (
-        df["close"]
-        .astype(float)
+    close = pd.to_numeric(
+        df["close"],
+        errors="coerce",
     )
 
     returns = (
@@ -1086,7 +1454,8 @@ def get_features(df):
 
     rs = (
         gain
-        / loss.replace(
+        /
+        loss.replace(
             0,
             np.nan,
         )
@@ -1094,7 +1463,8 @@ def get_features(df):
 
     rsi = (
         100
-        - 100 / (1 + rs)
+        -
+        100 / (1 + rs)
     )
 
     volume_mean = (
@@ -1116,7 +1486,8 @@ def get_features(df):
 
         volume_ratio = float(
             df["volume"].iloc[-1]
-            / volume_mean
+            /
+            volume_mean
         )
 
     else:
@@ -1128,7 +1499,8 @@ def get_features(df):
         momentum = float(
             (
                 close.iloc[-1]
-                / close.iloc[-21]
+                /
+                close.iloc[-21]
                 - 1
             )
             * 100
@@ -1141,7 +1513,8 @@ def get_features(df):
     trend = float(
         (
             fast_ema.iloc[-1]
-            / slow_ema.iloc[-1]
+            /
+            slow_ema.iloc[-1]
             - 1
         )
         * 100
@@ -1155,8 +1528,13 @@ def get_features(df):
         * 100
     )
 
+    rsi_value = rsi.iloc[-1]
+
+    if not np.isfinite(rsi_value):
+        rsi_value = 50.0
+
     return (
-        float(rsi.iloc[-1]),
+        float(rsi_value),
         volume_ratio,
         momentum,
         trend,
@@ -1165,7 +1543,7 @@ def get_features(df):
 
 
 # ============================================================
-# HYPOTHETICAL SIGNAL MODEL
+# SIGNAL MODEL
 # ============================================================
 
 def make_signal(
@@ -1211,8 +1589,10 @@ def make_signal(
         np.isfinite(
             volume_ratio
         )
-        and volume_ratio > 1.5
-        and momentum > 0
+        and
+        volume_ratio > 1.5
+        and
+        momentum > 0
     ):
 
         score += 4
@@ -1221,7 +1601,8 @@ def make_signal(
         np.isfinite(
             volatility
         )
-        and volatility > 3
+        and
+        volatility > 3
     ):
 
         score -= 4
@@ -1262,14 +1643,14 @@ def base_for(symbol):
 # ============================================================
 
 st.title(
-    "🤖 AI Market Intelligence v4.2"
+    "🤖 AI Market Intelligence v4.3"
 )
 
 st.caption(
-    "Read-only market data • "
-    "hypothetical signals • "
-    "persistent paper observations • "
-    "no real orders"
+    "Crypto • US Markets • Existing six assets "
+    "• 🇳🇬 NGX • hypothetical signals "
+    "• persistent paper observations "
+    "• no real orders"
 )
 
 # ============================================================
@@ -1290,6 +1671,7 @@ with st.sidebar:
             "Crypto",
             "US Stocks",
             "Indexes / ETFs",
+            "🇳🇬 Nigerian Stocks (NGX)",
             "Custom Watchlist",
         ],
     )
@@ -1308,6 +1690,52 @@ with st.sidebar:
 
     st.divider()
 
+    # --------------------------------------------------------
+    # API STATUS
+    # --------------------------------------------------------
+
+    st.subheader(
+        "Data Sources"
+    )
+
+    if ngx_ready():
+
+        st.success(
+            "🟢 NGX Pulse connected"
+        )
+
+    else:
+
+        st.warning(
+            "🟡 NGX Pulse key missing"
+        )
+
+    _, _, cg_plan = (
+        coingecko_config()
+    )
+
+    st.info(
+        f"Crypto: {cg_plan}"
+    )
+
+    if supabase_ready():
+
+        st.success(
+            "🟢 Persistent history"
+        )
+
+    else:
+
+        st.warning(
+            "🟡 Supabase not configured"
+        )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # CUSTOM SCANNER
+    # --------------------------------------------------------
+
     st.subheader(
         "🔎 Custom Asset Scanner"
     )
@@ -1318,15 +1746,12 @@ with st.sidebar:
         [
             "Crypto via CoinGecko",
             "US/HK/KR stock or ETF",
+            "NGX stock",
         ],
     )
 
     custom_symbol = st.text_input(
-        "Symbol or crypto ID",
-
-        placeholder=(
-            "e.g. SUI, pepe, AAPL"
-        ),
+        "Symbol / CoinGecko ID"
     ).strip()
 
     custom_name = st.text_input(
@@ -1343,63 +1768,6 @@ with st.sidebar:
                 "Enter a symbol first."
             )
 
-        elif (
-            custom_type
-            == "Crypto via CoinGecko"
-        ):
-
-            asset, error = (
-                coingecko_find_asset(
-                    custom_symbol
-                )
-            )
-
-            if not asset:
-
-                st.error(
-                    "CoinGecko lookup failed: "
-                    f"{error}"
-                )
-
-            else:
-
-                item = {
-
-                    "symbol": str(
-                        asset.get(
-                            "symbol",
-                            custom_symbol,
-                        )
-                    ).upper(),
-
-                    "name": (
-                        custom_name
-                        or asset.get(
-                            "name",
-                            custom_symbol,
-                        )
-                    ),
-
-                    "market":
-                        "coingecko",
-
-                    "asset_id":
-                        asset["id"],
-                }
-
-                if item not in (
-                    st.session_state
-                    .custom_assets
-                ):
-
-                    st.session_state\
-                        .custom_assets\
-                        .append(item)
-
-                st.success(
-                    f"Added {item['name']}"
-                )
-
         else:
 
             item = {
@@ -1407,13 +1775,12 @@ with st.sidebar:
                 "symbol":
                     custom_symbol.upper(),
 
-                "name": (
+                "name":
                     custom_name
-                    or custom_symbol.upper()
-                ),
+                    or custom_symbol.upper(),
 
                 "market":
-                    "yahoo",
+                    custom_type,
             }
 
             if item not in (
@@ -1441,8 +1808,7 @@ with st.sidebar:
         ):
 
             st.write(
-                f"• {item['name']} "
-                f"({item['symbol']})"
+                f"• {item['name']}"
             )
 
         if st.button(
@@ -1452,51 +1818,6 @@ with st.sidebar:
             st.session_state.custom_assets = []
 
             st.rerun()
-
-    st.divider()
-
-    _, _, cg_plan = (
-        coingecko_config()
-    )
-
-    st.info(
-        f"Crypto source: {cg_plan}"
-    )
-
-    if cg_plan == (
-        "CoinGecko Public"
-    ):
-
-        st.caption(
-            "No API key configured. "
-            "Using CoinGecko public API."
-        )
-
-    elif cg_plan == (
-        "CoinGecko Demo"
-    ):
-
-        st.success(
-            "CoinGecko Demo API key detected."
-        )
-
-    else:
-
-        st.success(
-            "CoinGecko Pro API key detected."
-        )
-
-    if supabase_ready():
-
-        st.success(
-            "🟢 Persistent history connected"
-        )
-
-    else:
-
-        st.warning(
-            "🟡 Persistent history needs Supabase"
-        )
 
 
 # ============================================================
@@ -1508,23 +1829,22 @@ if category == (
 ):
 
     watch = {
-        symbol: {
-            **data
-        }
-
-        for symbol, data
-        in TRADFI.items()
+        k: dict(v)
+        for k, v in TRADFI.items()
     }
 
 elif category == "Crypto":
 
     watch = {}
 
-    for symbol, data in CRYPTO.items():
+    for symbol, data in (
+        CRYPTO.items()
+    ):
 
         watch[symbol] = {
 
-            "name": data[0],
+            "name":
+                data[0],
 
             "ref":
                 "CoinGecko",
@@ -1546,11 +1866,14 @@ elif category == "US Stocks":
 
         watch[symbol] = {
 
-            "name": data[0],
+            "name":
+                data[0],
 
-            "ref": data[1],
+            "ref":
+                data[1],
 
-            "theme": data[2],
+            "theme":
+                data[2],
         }
 
 elif category == (
@@ -1565,11 +1888,42 @@ elif category == (
 
         watch[symbol] = {
 
-            "name": data[0],
+            "name":
+                data[0],
 
-            "ref": data[1],
+            "ref":
+                data[1],
 
-            "theme": data[2],
+            "theme":
+                data[2],
+        }
+
+elif category == (
+    "🇳🇬 Nigerian Stocks (NGX)"
+):
+
+    watch = {}
+
+    for symbol, data in (
+        NGX_WATCHLIST.items()
+    ):
+
+        watch[symbol] = {
+
+            "name":
+                data[0],
+
+            "ref":
+                "NGX",
+
+            "theme":
+                data[2],
+
+            "sector":
+                data[1],
+
+            "market":
+                "ngx",
         }
 
 else:
@@ -1581,29 +1935,25 @@ else:
         .custom_assets
     ):
 
-        watch[item["symbol"]] = {
+        market = item[
+            "market"
+        ]
+
+        watch[
+            item["symbol"]
+        ] = {
 
             "name":
                 item["name"],
 
-            "ref": (
-                "CoinGecko"
-                if item["market"]
-                == "coingecko"
-                else
-                "Yahoo Finance"
-            ),
+            "ref":
+                market,
 
             "theme":
                 "Custom watchlist",
 
             "market":
-                item["market"],
-
-            "asset_id":
-                item.get(
-                    "asset_id"
-                ),
+                market,
         }
 
 
@@ -1626,7 +1976,7 @@ for symbol, meta in (
     try:
 
         # ----------------------------------------------------
-        # TRADFI
+        # EXISTING SIX
         # ----------------------------------------------------
 
         if category == (
@@ -1656,7 +2006,7 @@ for symbol, meta in (
                 )
 
                 source = (
-                    f"Underlying "
+                    "Underlying "
                     f"{meta['ref']}"
                 )
 
@@ -1673,27 +2023,11 @@ for symbol, meta in (
         # CRYPTO
         # ----------------------------------------------------
 
-        elif (
-            category == "Crypto"
-
-            or (
-
-                category
-                == "Custom Watchlist"
-
-                and
-                meta.get("market")
-                == "coingecko"
-            )
-        ):
+        elif category == "Crypto":
 
             df = coingecko_history(
                 meta["asset_id"],
                 interval,
-            )
-
-            _, _, cg_plan = (
-                coingecko_config()
             )
 
             source = cg_plan
@@ -1703,7 +2037,86 @@ for symbol, meta in (
             )
 
         # ----------------------------------------------------
-        # STOCKS / ETFs
+        # NGX
+        # ----------------------------------------------------
+
+        elif category == (
+            "🇳🇬 Nigerian Stocks (NGX)"
+        ):
+
+            df = ngx_history(
+                symbol,
+                days=60,
+            )
+
+            source = (
+                "NGX Pulse"
+            )
+
+            status = (
+                "🟢 NGX Pulse"
+            )
+
+        # ----------------------------------------------------
+        # CUSTOM
+        # ----------------------------------------------------
+
+        elif category == (
+            "Custom Watchlist"
+        ):
+
+            if meta.get(
+                "market"
+            ) == "NGX stock":
+
+                df = ngx_history(
+                    symbol,
+                    days=60,
+                )
+
+                source = (
+                    "NGX Pulse"
+                )
+
+                status = (
+                    "🟢 NGX Pulse"
+                )
+
+            elif meta.get(
+                "market"
+            ) == "Crypto via CoinGecko":
+
+                # Treat the supplied symbol as
+                # a CoinGecko ID.
+
+                df = coingecko_history(
+                    symbol.lower(),
+                    interval,
+                )
+
+                source = cg_plan
+
+                status = (
+                    f"🟢 {cg_plan}"
+                )
+
+            else:
+
+                df = yahoo_history(
+                    symbol,
+                    interval,
+                )
+
+                source = (
+                    "Yahoo Finance"
+                )
+
+                status = (
+                    "🟢 Yahoo Finance"
+                )
+
+        # ----------------------------------------------------
+        # US / ETF
         # ----------------------------------------------------
 
         else:
@@ -1723,7 +2136,9 @@ for symbol, meta in (
 
         raw[symbol] = df
 
-        source_map[symbol] = source
+        source_map[
+            symbol
+        ] = source
 
         features = get_features(
             df
@@ -1736,6 +2151,13 @@ for symbol, meta in (
             )
         )
 
+        currency = (
+            "₦"
+            if category
+            == "🇳🇬 Nigerian Stocks (NGX)"
+            else "$"
+        )
+
         rows.append([
 
             symbol,
@@ -1744,8 +2166,12 @@ for symbol, meta in (
 
             meta["ref"],
 
+            currency,
+
             float(
-                df["close"].iloc[-1]
+                df[
+                    "close"
+                ].iloc[-1]
             ),
 
             signal,
@@ -1778,6 +2204,13 @@ for symbol, meta in (
             meta["name"],
 
             meta["ref"],
+
+            (
+                "₦"
+                if category
+                == "🇳🇬 Nigerian Stocks (NGX)"
+                else "$"
+            ),
 
             np.nan,
 
@@ -1812,29 +2245,18 @@ board = pd.DataFrame(
     columns=[
 
         "Symbol",
-
         "Asset",
-
         "Reference",
-
+        "Currency",
         "Price",
-
         "Signal",
-
         "Confidence",
-
         "RSI",
-
         "Momentum %",
-
         "Trend %",
-
         "Volume ratio",
-
         "Volatility %",
-
         "Data source",
-
         "Status",
     ],
 )
@@ -1850,7 +2272,7 @@ if not board.empty:
         board.style.format({
 
             "Price":
-                "{:.6f}",
+                "{:.4f}",
 
             "Confidence":
                 "{:.0f}%",
@@ -1885,69 +2307,169 @@ else:
 
 
 # ============================================================
+# NGX MARKET OVERVIEW
+# ============================================================
+
+if category == (
+    "🇳🇬 Nigerian Stocks (NGX)"
+):
+
+    st.subheader(
+        "🇳🇬 NGX Market Overview"
+    )
+
+    market_data, market_error = (
+        ngx_market_overview()
+    )
+
+    if market_data:
+
+        c1, c2, c3, c4, c5 = (
+            st.columns(5)
+        )
+
+        asi = market_data.get(
+            "asi"
+        )
+
+        pct = market_data.get(
+            "pct_change"
+        )
+
+        market_cap = market_data.get(
+            "market_cap"
+        )
+
+        volume = market_data.get(
+            "volume"
+        )
+
+        advancers = market_data.get(
+            "advancers"
+        )
+
+        decliners = market_data.get(
+            "decliners"
+        )
+
+        c1.metric(
+            "NGX ASI",
+            (
+                f"{asi:,.2f}"
+                if isinstance(
+                    asi,
+                    (int, float),
+                )
+                else "N/A"
+            ),
+        )
+
+        c2.metric(
+            "Daily change",
+            (
+                f"{pct:.2f}%"
+                if isinstance(
+                    pct,
+                    (int, float),
+                )
+                else "N/A"
+            ),
+        )
+
+        c3.metric(
+            "Market cap",
+            (
+                f"₦{market_cap:,.0f}"
+                if isinstance(
+                    market_cap,
+                    (int, float),
+                )
+                else "N/A"
+            ),
+        )
+
+        c4.metric(
+            "Volume",
+            (
+                f"{volume:,.0f}"
+                if isinstance(
+                    volume,
+                    (int, float),
+                )
+                else "N/A"
+            ),
+        )
+
+        c5.metric(
+            "Breadth",
+            (
+                f"{advancers} ↑ / "
+                f"{decliners} ↓"
+                if
+                isinstance(
+                    advancers,
+                    (int, float),
+                )
+                and
+                isinstance(
+                    decliners,
+                    (int, float),
+                )
+                else "N/A"
+            ),
+        )
+
+    else:
+
+        st.warning(
+            "NGX market overview unavailable: "
+            f"{market_error}"
+        )
+
+
+# ============================================================
 # API DIAGNOSTICS
 # ============================================================
 
 with st.expander(
     "🔧 API Diagnostics",
     expanded=bool(
-
-        st.session_state
-        .api_diagnostics
-
+        st.session_state.api_diagnostics
         and any(
-
-            x["status"]
-            == "ERROR"
-
-            for x in (
-                st.session_state
-                .api_diagnostics
-            )
+            x["status"] == "ERROR"
+            for x in
+            st.session_state
+            .api_diagnostics
         )
     ),
 ):
 
-    base, _, cg_plan = (
-        coingecko_config()
+    st.write(
+        "**NGX Pulse:**",
+        (
+            "Configured"
+            if ngx_ready()
+            else
+            "API key missing"
+        ),
     )
 
     st.write(
-        "**CoinGecko mode:**",
+        "**CoinGecko:**",
         cg_plan,
     )
 
-    st.code(
-        base
+    st.write(
+        "**Supabase:**",
+        (
+            "Connected"
+            if supabase_ready()
+            else
+            "Not configured"
+        ),
     )
 
-    if cg_plan == (
-        "CoinGecko Public"
-    ):
-
-        st.info(
-            "No CoinGecko key is configured. "
-            "Using the public API."
-        )
-
-    elif cg_plan == (
-        "CoinGecko Demo"
-    ):
-
-        st.success(
-            "CoinGecko Demo key detected."
-        )
-
-    else:
-
-        st.success(
-            "CoinGecko Pro key detected."
-        )
-
-    if (
-        st.session_state
-        .api_diagnostics
-    ):
+    if st.session_state.api_diagnostics:
 
         diagnostics = pd.DataFrame(
             st.session_state
@@ -1961,21 +2483,16 @@ with st.expander(
         )
 
         latest_error = next(
-
             (
-
                 item
-
-                for item in reversed(
+                for item
+                in reversed(
                     st.session_state
                     .api_diagnostics
                 )
-
                 if item["status"]
                 == "ERROR"
-
             ),
-
             None,
         )
 
@@ -1983,7 +2500,8 @@ with st.expander(
 
             st.error(
                 "Latest API failure: "
-                + latest_error[
+                +
+                latest_error[
                     "message"
                 ]
             )
@@ -2002,21 +2520,20 @@ with st.expander(
     else:
 
         st.info(
-            "No API requests have "
-            "been recorded yet."
+            "No API requests recorded yet."
         )
 
     if st.button(
         "Clear API diagnostics"
     ):
 
-        reset_api_diagnostics()
+        st.session_state.api_diagnostics = []
 
         st.rerun()
 
 
 # ============================================================
-# DATA SOURCE ERRORS
+# DATA ERRORS
 # ============================================================
 
 if errors:
@@ -2034,27 +2551,6 @@ if errors:
             )
 
 
-if category == "Crypto":
-
-    st.info(
-        "Crypto data is supplied by "
-        "CoinGecko. This dashboard is "
-        "read-only and does not send "
-        "cryptocurrency orders."
-    )
-
-
-if category == (
-    "TradFi / New Binance Perps"
-):
-
-    st.info(
-        "If a contract is unavailable, "
-        "the dashboard falls back to "
-        "its configured HKEX/KRX underlying."
-    )
-
-
 # ============================================================
 # ASSET INSPECTION
 # ============================================================
@@ -2068,7 +2564,9 @@ if raw:
 
     df = raw[selected]
 
-    meta = watch[selected]
+    meta = watch[
+        selected
+    ]
 
     features = get_features(
         df
@@ -2091,7 +2589,7 @@ if raw:
     )
 
     c2.metric(
-        "Confidence score",
+        "Confidence",
         f"{confidence}%",
     )
 
@@ -2114,12 +2612,10 @@ if raw:
         df.set_index(
             "time"
         )["close"],
-
         height=320,
     )
 
     st.caption(
-
         f"{meta['name']} • "
         f"{meta['ref']} • "
         f"{meta['theme']} • "
@@ -2127,16 +2623,15 @@ if raw:
         f"{source_map[selected]}"
     )
 
-    # ========================================================
+    # --------------------------------------------------------
     # PAPER OBSERVATION
-    # ========================================================
+    # --------------------------------------------------------
 
     st.subheader(
         "📝 Paper Observation"
     )
 
     direction = st.radio(
-
         "Hypothetical observation",
 
         [
@@ -2149,9 +2644,7 @@ if raw:
     )
 
     note = st.text_input(
-
         "Reason / note",
-
         placeholder=(
             "e.g. positive momentum + "
             "trend confirmation"
@@ -2212,20 +2705,20 @@ if raw:
         else:
 
             st.warning(
-                "Observation was not saved "
-                "permanently: "
+                "Observation not permanently "
+                "saved: "
                 + message
             )
 
 else:
 
     st.warning(
-        "No market data is currently available."
+        "No market data available."
     )
 
 
 # ============================================================
-# PAPER HISTORY
+# PERSISTENT PAPER HISTORY
 # ============================================================
 
 st.subheader(
@@ -2259,7 +2752,9 @@ if history:
         if symbol in raw:
 
             current_price = float(
-                raw[symbol][
+                raw[
+                    symbol
+                ][
                     "close"
                 ].iloc[-1]
             )
@@ -2270,7 +2765,8 @@ if history:
 
             move = (
                 current_price
-                / recorded_price
+                /
+                recorded_price
                 - 1
             ) * 100
 
@@ -2278,17 +2774,17 @@ if history:
                 "observation"
             ]
 
-            if observation == (
-                "Bullish"
-            ):
+            if observation == "Bullish":
 
-                correct = move > 0
+                correct = (
+                    move > 0
+                )
 
-            elif observation == (
-                "Bearish"
-            ):
+            elif observation == "Bearish":
 
-                correct = move < 0
+                correct = (
+                    move < 0
+                )
 
             else:
 
@@ -2323,12 +2819,12 @@ if history:
     )
 
     scored = result_df[
-        result_df[
-            "result"
-        ].isin([
-            "Correct",
-            "Incorrect",
-        ])
+        result_df["result"].isin(
+            [
+                "Correct",
+                "Incorrect",
+            ]
+        )
     ]
 
     a, b, c = (
@@ -2343,14 +2839,10 @@ if history:
     if len(scored):
 
         accuracy = (
-
             (
-                scored[
-                    "result"
-                ]
+                scored["result"]
                 == "Correct"
             ).mean()
-
             * 100
         )
 
@@ -2368,13 +2860,9 @@ if history:
 
     c.metric(
         "Pending",
-
         int(
-
             (
-                result_df[
-                    "result"
-                ]
+                result_df["result"]
                 == "Pending"
             ).sum()
         ),
@@ -2387,7 +2875,6 @@ if history:
     )
 
     st.download_button(
-
         "⬇️ Download paper history CSV",
 
         result_df.to_csv(
@@ -2433,8 +2920,8 @@ else:
     else:
 
         st.warning(
-            "Persistent history is not configured. "
-            "Add Supabase credentials to enable it."
+            "Persistent history requires "
+            "Supabase credentials."
         )
 
 
@@ -2443,18 +2930,9 @@ else:
 # ============================================================
 
 st.caption(
-
-    "AI Market Intelligence v4.2 • "
-    "CoinGecko crypto data • "
-    "Yahoo Finance • "
-    "Binance fallback • "
-    "Persistent paper history • "
+    "AI Market Intelligence v4.3 • "
+    "CoinGecko • Yahoo Finance • Binance • "
+    "NGX Pulse • Persistent paper history • "
     "Read-only analysis • "
-    "Last refresh: "
-
-    + datetime.now(
-        timezone.utc
-    ).strftime(
-        "%Y-%m-%d %H:%M:%S UTC"
-    )
+    "No real orders"
 )
