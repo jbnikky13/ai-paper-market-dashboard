@@ -1,33 +1,87 @@
-# AI Market Intelligence Dashboard v3
+# AI Market Intelligence v4.4
 
-A Streamlit paper-trading research dashboard.
+Complete dashboard + independent Telegram market reporter.
 
-## Features
-- Six new Binance TradFi perpetuals with automatic pre-launch fallback to their HKEX/KRX underlying
-- Crypto watchlist
-- US stocks
-- ETFs/indexes
-- Custom symbol scanner/watchlist
-- RSI, momentum, EMA trend, volume ratio and volatility features
-- Hypothetical Bullish / Neutral / Bearish signals
-- Confidence scores
-- Interactive price charts
-- Paper-observation history
-- Automatic accuracy scoring when current data is available
-- CSV export of paper history
-- No order execution
+## Architecture
 
-## Run locally
+`telegram_bot.py` does **not** import `app.py`.
+
+Therefore the Telegram worker can continue operating even if the Streamlit dashboard is offline.
+
+### Files
+
+- `app.py` — Streamlit dashboard
+- `telegram_bot.py` — independent Telegram worker
+- `requirements.txt` — dependencies
+- `.gitignore` — protects local secrets/data
+
+## Secrets
+
+### Streamlit
+
+Add these to Streamlit Secrets:
+
+```toml
+TELEGRAM_BOT_TOKEN = "..."
+TELEGRAM_CHANNEL_ID = "@yourchannel"
+NGXPULSE_API_KEY = "..."
+COINGECKO_DEMO_API_KEY = "..."
+```
+
+### Telegram worker
+
+Expose the same values as environment variables:
+
+```text
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHANNEL_ID
+NGXPULSE_API_KEY
+COINGECKO_DEMO_API_KEY
+```
+
+Never commit tokens to GitHub.
+
+## Test locally
+
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Deployment
-Push `app.py`, `requirements.txt`, and `README.md` to GitHub and deploy the repository with Streamlit Community Cloud.
+For Telegram:
 
-## Data
-Binance public market-data endpoints are used for Binance symbols. Yahoo Finance's public chart endpoint is used for stock/ETF and pre-launch underlying data.
+```bash
+python telegram_bot.py
+```
 
-## Important
-The confidence value is a model score, not a probability of profit. This project is for research and paper trading only.
+## Cloud operation
+
+The dashboard and Telegram worker should be deployed separately.
+
+A cloud scheduler/cron service should execute:
+
+```bash
+python telegram_bot.py
+```
+
+at the desired interval.
+
+Because the worker fetches market data directly, the Streamlit site does not need to be online for Telegram updates.
+
+## Data sources
+
+- CoinGecko — crypto
+- Yahoo Finance chart endpoint — listed assets
+- NGX Pulse — NGX, when configured
+
+## Paper history
+
+The dashboard stores snapshots in:
+
+`.market_data/paper_trades.csv`
+
+Local filesystem persistence depends on the hosting provider. For durable cloud storage, move this later to a database or external storage.
+
+## Scope
+
+This project is informational/paper analysis only. It does not execute trades or recommend a risk amount.
