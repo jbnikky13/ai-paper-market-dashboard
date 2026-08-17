@@ -1,173 +1,108 @@
-"""
-AI Market Intelligence v4.4 - Independent Telegram Worker
-
-This file intentionally does NOT import app.py.
-It can run when the Streamlit dashboard is offline.
-It fetches its own market data and posts informational updates.
-It does not execute trades.
-"""
-
-import os
-import html
-import time
-from datetime import datetime, timezone
+import os,html,time
+from datetime import datetime,timezone
 import requests
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "")
-NGXPULSE_API_KEY = os.getenv("NGXPULSE_API_KEY", "")
-COINGECKO_DEMO_API_KEY = os.getenv("COINGECKO_DEMO_API_KEY", "")
-DASHBOARD_URL = "https://ai-paper-market-dashboard.streamlit.app/"
+TOKEN=os.getenv("TELEGRAM_BOT_TOKEN",""); CHANNEL=os.getenv("TELEGRAM_CHANNEL_ID",""); NGX_KEY=os.getenv("NGXPULSE_API_KEY",""); CG_KEY=os.getenv("COINGECKO_DEMO_API_KEY","")
+DASH="https://ai-paper-market-dashboard.streamlit.app/"; VERSION="v4.4.1"
+CG="https://api.coingecko.com/api/v3"; YAHOO="https://query1.finance.yahoo.com/v8/finance/chart"; NGX="https://www.ngxpulse.ng"
+CRYPTO={"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB","ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
+US={"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft","GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
+NGX_ASSETS={"DANGCEM":"Dangote Cement","GTCO":"GTCO","ZENITHBANK":"Zenith Bank","ACCESSCORP":"Access Holdings","UBA":"UBA","FIRSTHOLDCO":"First HoldCo","MTNN":"MTN Nigeria","AIRTELAFRI":"Airtel Africa","BUAFOODS":"BUA Foods","BUACEMENT":"BUA Cement","SEPLAT":"Seplat Energy","ARADEL":"Aradel Holdings","PRESCO":"Presco","NB":"Nigerian Breweries","FLOURMILL":"Flour Mills"}
+SIX={"3308.HK":"ZhongJi InnoLight","042700.KS":"Hanmi Semiconductor","009150.KS":"Samsung Electro-Mechanics","066570.KS":"LG Electronics","035420.KS":"NAVER","069500.KS":"KODEX 200 ETF"}
 
-COINGECKO_BASE = "https://api.coingecko.com/api/v3"
-YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
-NGXPULSE_BASE = "https://www.ngxpulse.ng"
-
-CRYPTO = {"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB",
-          "ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
-US_ASSETS = {"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft",
-             "GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla",
-             "AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
-NGX_ASSETS = {"DANGCEM":"Dangote Cement","GTCO":"GTCO","ZENITHBANK":"Zenith Bank",
-              "ACCESSCORP":"Access Holdings","UBA":"UBA","FIRSTHOLDCO":"First HoldCo",
-              "MTNN":"MTN Nigeria","AIRTELAFRI":"Airtel Africa","BUAFOODS":"BUA Foods",
-              "BUACEMENT":"BUA Cement","SEPLAT":"Seplat Energy","ARADEL":"Aradel Holdings",
-              "PRESCO":"Presco","NB":"Nigerian Breweries","FLOURMILL":"Flour Mills"}
-SIX_ASSETS = {"3308.HK":"ZhongJi InnoLight","042700.KS":"Hanmi Semiconductor",
-              "009150.KS":"Samsung Electro-Mechanics","066570.KS":"LG Electronics",
-              "035420.KS":"NAVER","069500.KS":"KODEX 200 ETF"}
-
-def request_json(url, *, params=None, headers=None, retries=3):
-    last_error = None
-    for attempt in range(retries):
+def req(url,params=None,headers=None):
+    last=None
+    for i in range(3):
         try:
-            r = requests.get(url, params=params, headers=headers or {"User-Agent":"AI-Market-Intelligence-v4.4"}, timeout=20)
-            if r.ok: return r.json(), {"status":r.status_code,"error":None}
-            last_error = f"HTTP {r.status_code}: {r.text[:300]}"
-            if r.status_code not in (408,425,429,500,502,503,504): break
-        except Exception as exc: last_error = str(exc)
-        time.sleep(2 ** attempt)
-    return None, {"status":None,"error":last_error}
+            r=requests.get(url,params=params,headers=headers or {"User-Agent":"AI-Market-Intelligence-v4.4.1"},timeout=20)
+            if r.ok:return r, None
+            try:b=r.json();msg=b.get("message") or b.get("error") or r.text[:500]
+            except:msg=r.text[:500]
+            last=f"HTTP {r.status_code}: {msg}"
+            if r.status_code not in (408,425,429,500,502,503,504):break
+        except Exception as e:last=str(e)
+        time.sleep(2**i)
+    return None,last
 
-def signal_from_change(change):
-    if change is None: return "NO DATA", 0
-    change = float(change)
-    if change >= 2: return "BULLISH", min(95, round(55 + abs(change)*5))
-    if change <= -2: return "BEARISH", min(95, round(55 + abs(change)*5))
-    return "NEUTRAL", max(50, min(75, round(60 + abs(change)*2)))
+def sig(c):
+    if c is None:return "NO DATA",0
+    c=float(c)
+    if c>=2:return "BULLISH",min(95,round(55+abs(c)*5))
+    if c<=-2:return "BEARISH",min(95,round(55+abs(c)*5))
+    return "NEUTRAL",max(50,min(75,round(60+abs(c)*2)))
 
-def icon(change):
-    if change is None: return "⚪"
-    if change > 1: return "🟢"
-    if change < -1: return "🔴"
-    return "🟡"
+def price(p,c="$"):
+    if p is None:return "N/A"
+    if c=="₦":return f"₦{p:,.2f}"
+    return f"${p:.6f}" if p<1 else f"${p:,.2f}"
 
-def price_text(price, currency="$"):
-    if price is None: return "N/A"
-    if currency == "₦": return f"₦{price:,.2f}"
-    if price < 1: return f"${price:.6f}"
-    return f"${price:,.2f}"
+def crypto():
+    h={"User-Agent":"AI-Market-Intelligence-v4.4.1"}
+    if CG_KEY:h["x-cg-demo-api-key"]=CG_KEY
+    r,e=req(f"{CG}/simple/price",{"ids":",".join(CRYPTO),"vs_currencies":"usd","include_24hr_change":"true"},h)
+    return (r.json() if r else {}),e
 
-def get_crypto():
-    headers = {"x-cg-demo-api-key":COINGECKO_DEMO_API_KEY} if COINGECKO_DEMO_API_KEY else {}
-    return request_json(f"{COINGECKO_BASE}/simple/price",
-        params={"ids":",".join(CRYPTO),"vs_currencies":"usd","include_24hr_change":"true"},
-        headers=headers)
-
-def get_yahoo(symbol):
-    data, diag = request_json(f"{YAHOO_BASE}/{symbol}",
-        params={"range":"5d","interval":"1d"}, headers={"User-Agent":"Mozilla/5.0"})
-    if not data: return None, diag
+def yahoo(s):
+    u=f"{YAHOO}/{s}";r,e=req(u,{"range":"5d","interval":"1d"},{"User-Agent":"Mozilla/5.0"})
+    if not r:return None,e
     try:
-        result = data["chart"]["result"]
-        meta = result[0].get("meta", {})
-        price, previous = meta.get("regularMarketPrice"), meta.get("previousClose")
-        closes = [x for x in result[0].get("indicators",{}).get("quote",[{}])[0].get("close",[]) if x is not None]
-        if price is None and closes: price = closes[-1]
-        if previous is None and len(closes)>1: previous = closes[-2]
-        if price is None or previous in (None,0): return None, {"status":diag["status"],"error":"Price unavailable."}
-        return {"price":float(price),"change":((float(price)/float(previous))-1)*100}, diag
-    except Exception as exc:
-        return None, {"status":diag["status"],"error":str(exc)}
+        z=r.json()["chart"]["result"][0];m=z.get("meta",{});p=m.get("regularMarketPrice");pr=m.get("previousClose");cl=[x for x in z.get("indicators",{}).get("quote",[{}])[0].get("close",[]) if x is not None]
+        if p is None and cl:p=cl[-1]
+        if pr is None and len(cl)>1:pr=cl[-2]
+        if p is None or pr in (None,0):return None,"Price unavailable."
+        return {"price":float(p),"change":(float(p)/float(pr)-1)*100},None
+    except Exception as x:return None,str(x)
 
-def get_ngx(symbol):
-    if not NGXPULSE_API_KEY: return None, {"status":None,"error":"NGXPULSE_API_KEY is not configured."}
-    data, diag = request_json(f"{NGXPULSE_BASE}/api/ngxdata/prices/{symbol}",
-        params={"days":5}, headers={"X-API-Key":NGXPULSE_API_KEY,"User-Agent":"AI-Market-Intelligence-v4.4"})
-    if not data: return None, diag
+def ngx_all():
+    u=f"{NGX}/api/ngxdata/stocks"
+    if not NGX_KEY:return {}, "NGXPULSE_API_KEY is not configured."
+    r,e=req(u,headers={"X-API-Key":NGX_KEY,"Content-Type":"application/json","User-Agent":"AI-Market-Intelligence-v4.4.1"})
+    if not r:return {},e
     try:
-        history = (data.get("history") or data.get("data") or []) if isinstance(data,dict) else data
-        prices = []
-        for row in history:
-            if not isinstance(row,dict): continue
-            for key in ("close","current_price","price","close_price"):
-                if row.get(key) is not None:
-                    try: prices.append(float(row[key]))
-                    except (TypeError,ValueError): pass
-                    break
-        if not prices: return None, {"status":diag["status"],"error":"No numeric NGX prices."}
-        current, previous = prices[-1], prices[-2] if len(prices)>1 else prices[-1]
-        return {"price":current,"change":((current/previous)-1)*100 if previous else 0}, diag
-    except Exception as exc:
-        return None, {"status":diag["status"],"error":str(exc)}
+        p=r.json();rows=p if isinstance(p,list) else (p.get("data") or p.get("stocks") or []);out={}
+        for x in rows:
+            if not isinstance(x,dict):continue
+            s=str(x.get("symbol") or "").upper().strip()
+            if not s:continue
+            try:pp=float(x["current_price"]) if x.get("current_price") is not None else None
+            except:pp=None
+            try:ch=float(x["change_percent"]) if x.get("change_percent") is not None else None
+            except:ch=None
+            out[s]={"price":pp,"change":ch}
+        return out,None if out else "No recognised stock records returned."
+    except Exception as x:return {},f"Could not parse NGX response: {x}"
 
-def telegram_send(message):
-    if not TELEGRAM_BOT_TOKEN: return False, "TELEGRAM_BOT_TOKEN is missing."
-    if not TELEGRAM_CHANNEL_ID: return False, "TELEGRAM_CHANNEL_ID is missing."
-    try:
-        r = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id":TELEGRAM_CHANNEL_ID,"text":message,"parse_mode":"HTML",
-                  "disable_web_page_preview":False}, timeout=20)
-        if r.ok: return True, "Telegram message sent."
-        return False, f"HTTP {r.status_code}: {r.text[:500]}"
-    except Exception as exc: return False, str(exc)
+def add(lines,s,x,c="$"):
+    if not x or x.get("price") is None:lines.append(f"⚪ <b>{html.escape(s)}</b> — unavailable");return
+    ch=x.get("change");sg,cf=sig(ch);ico="🟢" if ch is not None and ch>1 else ("🔴" if ch is not None and ch<-1 else "🟡")
+    lines.append(f"{ico} <b>{html.escape(s)}</b> {price(x['price'],c)} ({ch:+.2f}%) • {sg} {cf}%" if ch is not None else f"⚪ <b>{html.escape(s)}</b> {price(x['price'],c)} — no change data")
 
-def add_line(lines, symbol, data, currency="$"):
-    if not data:
-        lines.append(f"⚪ <b>{html.escape(symbol)}</b> — unavailable")
-        return
-    change = data["change"]
-    signal, confidence = signal_from_change(change)
-    lines.append(f"{icon(change)} <b>{html.escape(symbol)}</b> {price_text(data['price'],currency)} "
-                 f"({change:+.2f}%) • {signal} {confidence}%")
-
-def build_report():
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines = [f"<b>🤖 AI MARKET INTELLIGENCE v4.4</b>",f"<i>{now}</i>",""]
-
-    lines.append("<b>₿ CRYPTO</b>")
-    crypto, diag = get_crypto()
-    if crypto:
-        for coin_id,ticker in CRYPTO.items():
-            item=crypto.get(coin_id,{})
-            add_line(lines,ticker,{"price":item.get("usd"),"change":item.get("usd_24h_change")} if item.get("usd") is not None else None)
-    else:
-        lines.append(f"⚠️ CoinGecko unavailable: {html.escape(str(diag.get('error')))}")
-
-    lines.append(""); lines.append("<b>🇺🇸 US / ETFs</b>")
-    for symbol in US_ASSETS:
-        data,_=get_yahoo(symbol); add_line(lines,symbol,data)
-
-    lines.append(""); lines.append("<b>🇳🇬 NGX</b>")
-    if not NGXPULSE_API_KEY: lines.append("⚠️ NGX Pulse API key not configured.")
-    else:
-        for symbol in NGX_ASSETS:
-            data,_=get_ngx(symbol); add_line(lines,symbol,data,"₦")
-
-    lines.append(""); lines.append("<b>🌏 SIX TRACKED ASSETS</b>")
-    for symbol,name in SIX_ASSETS.items():
-        data,_=get_yahoo(symbol); add_line(lines,name,data)
-
-    lines += ["","━━━━━━━━━━━━━━━━","ℹ️ Hypothetical paper-analysis signals only. No trades are executed.",
-              f'🌐 <a href="{DASHBOARD_URL}">Open dashboard</a>']
+def build():
+    lines=[f"<b>🤖 AI MARKET INTELLIGENCE {VERSION}</b>",f"<i>{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</i>",""]
+    lines.append("<b>₿ CRYPTO</b>");c,e=crypto()
+    if c:
+        for cid,s in CRYPTO.items():
+            q=c.get(cid,{});add(lines,s,{"price":q.get("usd"),"change":q.get("usd_24h_change")} if q.get("usd") is not None else None)
+    else:lines.append(f"⚠️ CoinGecko unavailable: {html.escape(str(e))}")
+    lines+=["","<b>🇺🇸 US / ETFs</b>"]
+    for s in US:add(lines,s,yahoo(s)[0])
+    lines+=["","<b>🇳🇬 NGX</b>"];n,e=ngx_all()
+    if n:
+        for s in NGX_ASSETS:add(lines,s,n.get(s),"₦")
+    else:lines.append(f"⚠️ NGX unavailable — {html.escape(str(e or 'Unknown error'))}")
+    lines+=["","<b>🌏 SIX TRACKED ASSETS</b>"]
+    for s,name in SIX.items():add(lines,name,yahoo(s)[0])
+    lines+=["","━━━━━━━━━━━━━━━━","ℹ️ Hypothetical paper-analysis signals only. No trades are executed.",f'🌐 <a href="{DASH}">Open dashboard</a>']
     return "\n".join(lines)
 
-def main():
-    report=build_report()
-    print(report)
-    ok,result=telegram_send(report)
-    print(result)
-    if not ok: raise SystemExit(1)
+def send(msg):
+    if not TOKEN:return False,"TELEGRAM_BOT_TOKEN is missing."
+    if not CHANNEL:return False,"TELEGRAM_CHANNEL_ID is missing."
+    try:
+        r=requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",json={"chat_id":CHANNEL,"text":msg,"parse_mode":"HTML"},timeout=20)
+        return (True,"Telegram message sent.") if r.ok else (False,f"HTTP {r.status_code}: {r.text[:500]}")
+    except Exception as e:return False,str(e)
 
 if __name__=="__main__":
-    main()
+    msg=build();print(msg);ok,result=send(msg);print(result)
+    if not ok:raise SystemExit(1)

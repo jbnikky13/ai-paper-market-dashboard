@@ -1,378 +1,196 @@
-"""
-AI Market Intelligence Dashboard v4.4
-Standalone Streamlit dashboard.
-
-Telegram is optional. The dashboard and Telegram worker are independent.
-No real trades are executed.
-"""
-
-import os
-import html
-import time
+import os, html, time
 from pathlib import Path
 from datetime import datetime, timezone
-
-import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
 
-st.set_page_config(page_title="AI Market Intelligence v4.4", page_icon="📊", layout="wide")
+st.set_page_config(page_title="AI Market Intelligence v4.4.1", page_icon="📊", layout="wide")
+VERSION="v4.4.1"; DASHBOARD_URL="https://ai-paper-market-dashboard.streamlit.app/"
+DATA_DIR=Path(os.getenv("MARKET_DATA_DIR",".market_data")); DATA_DIR.mkdir(exist_ok=True)
+PAPER_FILE=DATA_DIR/"paper_trades.csv"
+CG="https://api.coingecko.com/api/v3"; YAHOO="https://query1.finance.yahoo.com/v8/finance/chart"; NGX="https://www.ngxpulse.ng"
 
-APP_VERSION = "v4.4"
-DASHBOARD_URL = "https://ai-paper-market-dashboard.streamlit.app/"
-DATA_DIR = Path(os.getenv("MARKET_DATA_DIR", ".market_data"))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-PAPER_FILE = DATA_DIR / "paper_trades.csv"
+CRYPTO={"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB","ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
+US_ASSETS={"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft","GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
+NGX_ASSETS={"DANGCEM":"Dangote Cement","GTCO":"GTCO","ZENITHBANK":"Zenith Bank","ACCESSCORP":"Access Holdings","UBA":"UBA","FIRSTHOLDCO":"First HoldCo","MTNN":"MTN Nigeria","AIRTELAFRI":"Airtel Africa","BUAFOODS":"BUA Foods","BUACEMENT":"BUA Cement","SEPLAT":"Seplat Energy","ARADEL":"Aradel Holdings","PRESCO":"Presco","NB":"Nigerian Breweries","FLOURMILL":"Flour Mills"}
+SIX_ASSETS={"3308.HK":"ZhongJi InnoLight","042700.KS":"Hanmi Semiconductor","009150.KS":"Samsung Electro-Mechanics","066570.KS":"LG Electronics","035420.KS":"NAVER","069500.KS":"KODEX 200 ETF"}
 
-COINGECKO_BASE = "https://api.coingecko.com/api/v3"
-YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
-NGXPULSE_BASE = "https://www.ngxpulse.ng"
-
-CRYPTO = {
-    "bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL",
-    "binancecoin": "BNB", "ripple": "XRP", "dogecoin": "DOGE",
-    "chainlink": "LINK", "avalanche-2": "AVAX",
-}
-US_ASSETS = {
-    "NVDA": "NVIDIA", "AMD": "AMD", "AVGO": "Broadcom",
-    "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon",
-    "META": "Meta", "TSLA": "Tesla", "AAPL": "Apple",
-    "QQQ": "Nasdaq-100 ETF", "SPY": "S&P 500 ETF",
-}
-NGX_ASSETS = {
-    "DANGCEM": "Dangote Cement", "GTCO": "GTCO", "ZENITHBANK": "Zenith Bank",
-    "ACCESSCORP": "Access Holdings", "UBA": "UBA", "FIRSTHOLDCO": "First HoldCo",
-    "MTNN": "MTN Nigeria", "AIRTELAFRI": "Airtel Africa", "BUAFOODS": "BUA Foods",
-    "BUACEMENT": "BUA Cement", "SEPLAT": "Seplat Energy", "ARADEL": "Aradel Holdings",
-    "PRESCO": "Presco", "NB": "Nigerian Breweries", "FLOURMILL": "Flour Mills",
-}
-SIX_ASSETS = {
-    "3308.HK": "ZhongJi InnoLight", "042700.KS": "Hanmi Semiconductor",
-    "009150.KS": "Samsung Electro-Mechanics", "066570.KS": "LG Electronics",
-    "035420.KS": "NAVER", "069500.KS": "KODEX 200 ETF",
-}
-
-def secret(name, default=""):
+def secret(n):
     try:
-        value = st.secrets.get(name, None)
-        if value is not None:
-            return str(value)
-    except Exception:
-        pass
-    return os.getenv(name, default)
+        v=st.secrets.get(n)
+        if v is not None:return str(v)
+    except Exception:pass
+    return os.getenv(n,"")
+TELEGRAM_BOT_TOKEN=secret("TELEGRAM_BOT_TOKEN"); TELEGRAM_CHANNEL_ID=secret("TELEGRAM_CHANNEL_ID")
+NGXPULSE_API_KEY=secret("NGXPULSE_API_KEY"); COINGECKO_DEMO_API_KEY=secret("COINGECKO_DEMO_API_KEY")
 
-TELEGRAM_BOT_TOKEN = secret("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHANNEL_ID = secret("TELEGRAM_CHANNEL_ID")
-NGXPULSE_API_KEY = secret("NGXPULSE_API_KEY")
-COINGECKO_DEMO_API_KEY = secret("COINGECKO_DEMO_API_KEY")
-
-def api_get(url, *, params=None, headers=None, timeout=15):
-    started = time.time()
+def get(url,params=None,headers=None,timeout=20):
+    t=time.time()
     try:
-        response = requests.get(
-            url, params=params,
-            headers=headers or {"User-Agent": "AI-Market-Intelligence-v4.4"},
-            timeout=timeout,
-        )
-        return response, round(time.time() - started, 2), None
-    except Exception as exc:
-        return None, round(time.time() - started, 2), str(exc)
+        r=requests.get(url,params=params,headers=headers or {"User-Agent":"AI-Market-Intelligence-v4.4.1"},timeout=timeout)
+        return r,round(time.time()-t,2),None
+    except Exception as e:return None,round(time.time()-t,2),str(e)
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_crypto():
-    headers = {"x-cg-demo-api-key": COINGECKO_DEMO_API_KEY} if COINGECKO_DEMO_API_KEY else {}
-    response, elapsed, error = api_get(
-        f"{COINGECKO_BASE}/simple/price",
-        params={
-            "ids": ",".join(CRYPTO.keys()),
-            "vs_currencies": "usd",
-            "include_24hr_change": "true",
-            "include_24hr_vol": "true",
-        },
-        headers=headers,
-    )
-    status = response.status_code if response is not None else None
-    diag = {"status": status, "elapsed": elapsed, "error": error}
-    if response is None:
-        return {}, diag
-    if not response.ok:
-        diag["error"] = response.text[:500]
-        return {}, diag
-    return response.json(), diag
+@st.cache_data(ttl=300,show_spinner=False)
+def crypto():
+    h={"User-Agent":"AI-Market-Intelligence-v4.4.1"}
+    if COINGECKO_DEMO_API_KEY:h["x-cg-demo-api-key"]=COINGECKO_DEMO_API_KEY
+    u=f"{CG}/simple/price"; r,e,err=get(u,{"ids":",".join(CRYPTO),"vs_currencies":"usd","include_24hr_change":"true","include_24hr_vol":"true"},h)
+    d={"endpoint":u,"status":r.status_code if r else None,"elapsed":e,"error":err}
+    if not r:return {},d
+    if not r.ok:d["error"]=r.text[:500];return {},d
+    try:return r.json(),d
+    except Exception as x:d["error"]=str(x);return {},d
 
-@st.cache_data(ttl=120, show_spinner=False)
-def get_yahoo(symbol):
-    response, elapsed, error = api_get(
-        f"{YAHOO_BASE}/{symbol}",
-        params={"range": "5d", "interval": "1d"},
-        headers={"User-Agent": "Mozilla/5.0"},
-    )
-    diag = {"status": response.status_code if response is not None else None,
-            "elapsed": elapsed, "error": error}
-    if response is None or not response.ok:
-        if response is not None:
-            diag["error"] = response.text[:500]
-        return None, diag
+@st.cache_data(ttl=120,show_spinner=False)
+def yahoo(symbol):
+    u=f"{YAHOO}/{symbol}"; r,e,err=get(u,{"range":"5d","interval":"1d"},{"User-Agent":"Mozilla/5.0"})
+    d={"endpoint":u,"status":r.status_code if r else None,"elapsed":e,"error":err}
+    if not r or not r.ok:
+        if r:d["error"]=r.text[:500]
+        return None,d
     try:
-        result = response.json()["chart"]["result"]
-        if not result:
-            diag["error"] = "Yahoo returned no result."
-            return None, diag
-        meta = result[0].get("meta", {})
-        price = meta.get("regularMarketPrice")
-        previous = meta.get("previousClose")
-        quote = result[0].get("indicators", {}).get("quote", [{}])[0]
-        closes = [x for x in quote.get("close", []) if x is not None]
-        if price is None and closes:
-            price = closes[-1]
-        if previous is None and len(closes) > 1:
-            previous = closes[-2]
-        if price is None or previous in (None, 0):
-            diag["error"] = "Price/previous close unavailable."
-            return None, diag
-        change = ((float(price) / float(previous)) - 1) * 100
-        return {"price": float(price), "change": float(change)}, diag
-    except Exception as exc:
-        diag["error"] = str(exc)
-        return None, diag
+        res=r.json()["chart"]["result"][0]; meta=res.get("meta",{}); p=meta.get("regularMarketPrice"); prev=meta.get("previousClose")
+        closes=[x for x in res.get("indicators",{}).get("quote",[{}])[0].get("close",[]) if x is not None]
+        if p is None and closes:p=closes[-1]
+        if prev is None and len(closes)>1:prev=closes[-2]
+        if p is None or prev in (None,0):d["error"]="Price/previous close unavailable.";return None,d
+        return {"price":float(p),"change":(float(p)/float(prev)-1)*100},d
+    except Exception as x:d["error"]=str(x);return None,d
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_ngx(symbol):
-    if not NGXPULSE_API_KEY:
-        return None, {"status": None, "elapsed": 0, "error": "NGXPULSE_API_KEY is not configured."}
-    response, elapsed, error = api_get(
-        f"{NGXPULSE_BASE}/api/ngxdata/prices/{symbol}",
-        params={"days": 5},
-        headers={"X-API-Key": NGXPULSE_API_KEY, "User-Agent": "AI-Market-Intelligence-v4.4"},
-    )
-    diag = {"status": response.status_code if response is not None else None,
-            "elapsed": elapsed, "error": error}
-    if response is None or not response.ok:
-        if response is not None:
-            diag["error"] = response.text[:500]
-        return None, diag
+@st.cache_data(ttl=300,show_spinner=False)
+def ngx_all():
+    u=f"{NGX}/api/ngxdata/stocks"
+    if not NGXPULSE_API_KEY:return {},{"endpoint":u,"status":None,"elapsed":0,"count":0,"error":"NGXPULSE_API_KEY is not configured in Streamlit Secrets."}
+    r,e,err=get(u,headers={"X-API-Key":NGXPULSE_API_KEY,"Content-Type":"application/json","User-Agent":"AI-Market-Intelligence-v4.4.1"})
+    d={"endpoint":u,"status":r.status_code if r else None,"elapsed":e,"count":0,"error":err}
+    if not r:return {},d
+    if not r.ok:
+        try:b=r.json();d["error"]=b.get("message") or b.get("error") or r.text[:500]
+        except Exception:d["error"]=r.text[:500]
+        return {},d
     try:
-        data = response.json()
-        history = (data.get("history") or data.get("data") or []) if isinstance(data, dict) else data
-        df = pd.DataFrame(history)
-        if df.empty:
-            diag["error"] = "NGX returned no rows."
-            return None, diag
-        col = next((c for c in ["close", "current_price", "price", "close_price"] if c in df.columns), None)
-        if col is None:
-            diag["error"] = "No recognised price column in NGX response."
-            return None, diag
-        prices = pd.to_numeric(df[col], errors="coerce").dropna()
-        if prices.empty:
-            diag["error"] = "No numeric NGX prices."
-            return None, diag
-        current = float(prices.iloc[-1])
-        previous = float(prices.iloc[-2]) if len(prices) > 1 else current
-        change = ((current / previous) - 1) * 100 if previous else 0
-        return {"price": current, "change": change}, diag
-    except Exception as exc:
-        diag["error"] = str(exc)
-        return None, diag
+        p=r.json(); rows=p if isinstance(p,list) else (p.get("data") or p.get("stocks") or [])
+        out={}
+        for x in rows:
+            if not isinstance(x,dict):continue
+            s=str(x.get("symbol") or "").upper().strip()
+            if not s:continue
+            try:price=float(x["current_price"]) if x.get("current_price") is not None else None
+            except:price=None
+            try:change=float(x["change_percent"]) if x.get("change_percent") is not None else None
+            except:change=None
+            out[s]={"name":x.get("name") or s,"price":price,"change":change}
+        d["count"]=len(out)
+        if not out:d["error"]="HTTP request succeeded, but no recognised stock records were returned."
+        return out,d
+    except Exception as x:d["error"]=f"Could not parse NGX response: {x}";return {},d
 
-def signal_from_change(change):
-    if change is None or pd.isna(change):
-        return "NO DATA", 0
-    change = float(change)
-    if change >= 2:
-        return "BULLISH", min(95, round(55 + abs(change) * 5))
-    if change <= -2:
-        return "BEARISH", min(95, round(55 + abs(change) * 5))
-    return "NEUTRAL", max(50, min(75, round(60 + abs(change) * 2)))
+def signal(c):
+    if c is None or pd.isna(c):return "NO DATA",0
+    c=float(c)
+    if c>=2:return "BULLISH",min(95,round(55+abs(c)*5))
+    if c<=-2:return "BEARISH",min(95,round(55+abs(c)*5))
+    return "NEUTRAL",max(50,min(75,round(60+abs(c)*2)))
 
-def movement_icon(change):
-    if change is None or pd.isna(change): return "⚪"
-    if change > 1: return "🟢"
-    if change < -1: return "🔴"
-    return "🟡"
+def fmt(p,c="$"):
+    if p is None or pd.isna(p):return "N/A"
+    if c=="₦":return f"₦{p:,.2f}"
+    return f"${p:.6f}" if p<1 else f"${p:,.2f}"
 
-def fmt_price(price, currency="$"):
-    if price is None or pd.isna(price): return "N/A"
-    if currency == "₦": return f"₦{price:,.2f}"
-    if price < 1: return f"${price:.6f}"
-    return f"${price:,.2f}"
-
-def load_paper_history():
-    columns = ["timestamp", "asset", "source", "price", "change_pct", "signal", "confidence", "status"]
-    if not PAPER_FILE.exists():
-        return pd.DataFrame(columns=columns)
+def history():
+    cols=["timestamp","asset","source","price","change_pct","signal","confidence","status"]
+    if not PAPER_FILE.exists():return pd.DataFrame(columns=cols)
     try:
-        df = pd.read_csv(PAPER_FILE)
-        for c in columns:
-            if c not in df.columns: df[c] = ""
-        return df[columns]
-    except Exception:
-        return pd.DataFrame(columns=columns)
+        d=pd.read_csv(PAPER_FILE)
+        for c in cols:
+            if c not in d:d[c]=""
+        return d[cols]
+    except:return pd.DataFrame(columns=cols)
 
-def save_paper_history(df):
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    df.to_csv(PAPER_FILE, index=False)
+def snapshot(rows):
+    d=pd.concat([history(),pd.DataFrame(rows)],ignore_index=True).tail(5000)
+    DATA_DIR.mkdir(exist_ok=True);d.to_csv(PAPER_FILE,index=False)
 
-def record_snapshot(rows):
-    if not rows: return
-    combined = pd.concat([load_paper_history(), pd.DataFrame(rows)], ignore_index=True)
-    save_paper_history(combined.tail(5000))
-
-def send_telegram_message(message, silent=False):
-    if not TELEGRAM_BOT_TOKEN: return False, "TELEGRAM_BOT_TOKEN is not configured."
-    if not TELEGRAM_CHANNEL_ID: return False, "TELEGRAM_CHANNEL_ID is not configured."
-    endpoint = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+def telegram(msg):
+    if not TELEGRAM_BOT_TOKEN:return False,"TELEGRAM_BOT_TOKEN is not configured."
+    if not TELEGRAM_CHANNEL_ID:return False,"TELEGRAM_CHANNEL_ID is not configured."
     try:
-        response = requests.post(endpoint, json={
-            "chat_id": TELEGRAM_CHANNEL_ID, "text": message,
-            "parse_mode": "HTML", "disable_web_page_preview": False,
-            "disable_notification": silent,
-        }, timeout=15)
-        if response.ok: return True, "Telegram message sent."
-        return False, f"HTTP {response.status_code}: {response.text[:500]}"
-    except Exception as exc:
-        return False, str(exc)
+        r=requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",json={"chat_id":TELEGRAM_CHANNEL_ID,"text":msg,"parse_mode":"HTML"},timeout=15)
+        return (True,"Telegram message sent.") if r.ok else (False,f"HTTP {r.status_code}: {r.text[:500]}")
+    except Exception as x:return False,str(x)
 
-def build_dashboard_rows():
-    rows, diagnostics = [], []
-    crypto, diag = get_crypto()
-    diagnostics.append(("CoinGecko", diag))
-    for coin_id, ticker in CRYPTO.items():
-        item = crypto.get(coin_id, {})
-        price, change = item.get("usd"), item.get("usd_24h_change")
-        signal, confidence = signal_from_change(change)
-        rows.append({"asset": ticker, "name": ticker, "source": "CoinGecko",
-                     "price": price, "change_pct": change, "signal": signal,
-                     "confidence": confidence, "currency": "$",
-                     "status": "OK" if price is not None else "NO DATA"})
-    for symbol, name in US_ASSETS.items():
-        data, diag = get_yahoo(symbol)
-        diagnostics.append((f"Yahoo:{symbol}", diag))
-        price, change = (data["price"], data["change"]) if data else (None, None)
-        signal, confidence = signal_from_change(change)
-        rows.append({"asset": symbol, "name": name, "source": "Yahoo Finance",
-                     "price": price, "change_pct": change, "signal": signal,
-                     "confidence": confidence, "currency": "$",
-                     "status": "OK" if price is not None else "NO DATA"})
-    for symbol, name in NGX_ASSETS.items():
-        data, diag = get_ngx(symbol)
-        diagnostics.append((f"NGX:{symbol}", diag))
-        price, change = (data["price"], data["change"]) if data else (None, None)
-        signal, confidence = signal_from_change(change)
-        rows.append({"asset": symbol, "name": name, "source": "NGX Pulse",
-                     "price": price, "change_pct": change, "signal": signal,
-                     "confidence": confidence, "currency": "₦",
-                     "status": "OK" if price is not None else "NO DATA"})
-    for symbol, name in SIX_ASSETS.items():
-        data, diag = get_yahoo(symbol)
-        diagnostics.append((f"Yahoo:{symbol}", diag))
-        price, change = (data["price"], data["change"]) if data else (None, None)
-        signal, confidence = signal_from_change(change)
-        rows.append({"asset": symbol, "name": name, "source": "Yahoo Finance",
-                     "price": price, "change_pct": change, "signal": signal,
-                     "confidence": confidence, "currency": "$",
-                     "status": "OK" if price is not None else "NO DATA"})
-    return rows, diagnostics
+def rows_and_diag():
+    rows=[];diags=[]
+    c,dc=crypto();diags.append(("CoinGecko",dc))
+    for cid,s in CRYPTO.items():
+        x=c.get(cid,{});p=x.get("usd");ch=x.get("usd_24h_change");sg,cf=signal(ch)
+        rows.append({"asset":s,"name":s,"source":"CoinGecko","price":p,"change_pct":ch,"signal":sg,"confidence":cf,"currency":"$","status":"OK" if p is not None else "NO DATA"})
+    for s,n in US_ASSETS.items():
+        x,dx=yahoo(s);diags.append((f"Yahoo:{s}",dx));p,ch=(x["price"],x["change"]) if x else (None,None);sg,cf=signal(ch)
+        rows.append({"asset":s,"name":n,"source":"Yahoo Finance","price":p,"change_pct":ch,"signal":sg,"confidence":cf,"currency":"$","status":"OK" if p is not None else "NO DATA"})
+    nd,dn=ngx_all();diags.append(("NGX Pulse /stocks",dn))
+    for s,n in NGX_ASSETS.items():
+        x=nd.get(s);p,ch=((x["price"],x["change"]) if x else (None,None));sg,cf=signal(ch)
+        rows.append({"asset":s,"name":x.get("name",n) if x else n,"source":"NGX Pulse","price":p,"change_pct":ch,"signal":sg,"confidence":cf,"currency":"₦","status":"OK" if p is not None else "NO DATA"})
+    for s,n in SIX_ASSETS.items():
+        x,dx=yahoo(s);diags.append((f"Yahoo:{s}",dx));p,ch=(x["price"],x["change"]) if x else (None,None);sg,cf=signal(ch)
+        rows.append({"asset":s,"name":n,"source":"Yahoo Finance","price":p,"change_pct":ch,"signal":sg,"confidence":cf,"currency":"$","status":"OK" if p is not None else "NO DATA"})
+    return rows,diags
 
-def telegram_report(rows):
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines = [f"<b>🤖 AI MARKET INTELLIGENCE {APP_VERSION}</b>", f"<i>{now}</i>", ""]
-    groups = [
-        ("₿ CRYPTO", [r for r in rows if r["source"] == "CoinGecko"]),
-        ("🇺🇸 US / ETF", [r for r in rows if r["source"] == "Yahoo Finance" and r["asset"] in US_ASSETS]),
-        ("🇳🇬 NGX", [r for r in rows if r["source"] == "NGX Pulse"]),
-        ("🌏 SIX TRACKED ASSETS", [r for r in rows if r["asset"] in SIX_ASSETS]),
-    ]
-    for title, group in groups:
+def report(rows):
+    lines=[f"<b>🤖 AI MARKET INTELLIGENCE {VERSION}</b>",f"<i>{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</i>",""]
+    groups=[("₿ CRYPTO",[x for x in rows if x["source"]=="CoinGecko"]),("🇺🇸 US / ETFs",[x for x in rows if x["source"]=="Yahoo Finance" and x["asset"] in US_ASSETS]),("🇳🇬 NGX",[x for x in rows if x["source"]=="NGX Pulse"]),("🌏 SIX TRACKED ASSETS",[x for x in rows if x["asset"] in SIX_ASSETS])]
+    for title,g in groups:
         lines.append(f"<b>{title}</b>")
-        for r in group:
-            if r["change_pct"] is None or pd.isna(r["change_pct"]):
-                lines.append(f"⚪ <b>{html.escape(r['asset'])}</b> — no data")
+        for x in g:
+            ch=x["change_pct"]
+            if ch is None:lines.append(f"⚪ <b>{html.escape(x['asset'])}</b> — no data")
             else:
-                lines.append(
-                    f"{movement_icon(r['change_pct'])} <b>{html.escape(r['asset'])}</b> "
-                    f"{fmt_price(r['price'], r['currency'])} "
-                    f"({r['change_pct']:+.2f}%) • {r['signal']} {r['confidence']}%"
-                )
+                icon="🟢" if ch>1 else ("🔴" if ch<-1 else "🟡")
+                lines.append(f"{icon} <b>{html.escape(x['asset'])}</b> {fmt(x['price'],x['currency'])} ({ch:+.2f}%) • {x['signal']} {x['confidence']}%")
         lines.append("")
-    lines += ["━━━━━━━━━━━━━━━━",
-              "ℹ️ Hypothetical paper-analysis signals only. No trades are executed.",
-              f'🌐 <a href="{DASHBOARD_URL}">Open dashboard</a>']
-    return "
-".join(lines)
+    lines += ["━━━━━━━━━━━━━━━━","ℹ️ Hypothetical paper-analysis signals only. No trades are executed.",f'🌐 <a href="{DASHBOARD_URL}">Open dashboard</a>']
+    return "\n".join(lines)
 
 st.title("📊 AI Market Intelligence")
-st.caption(f"{APP_VERSION} • informational / paper-trading dashboard")
-
+st.caption(f"{VERSION} • informational / paper-trading dashboard")
 with st.sidebar:
     st.header("⚙️ Controls")
-    if st.button("🔄 Refresh market data"):
-        st.cache_data.clear()
-        st.rerun()
-    st.divider()
-    st.subheader("📣 Telegram")
+    if st.button("🔄 Refresh market data"):st.cache_data.clear();st.rerun()
+    st.divider();st.subheader("📣 Telegram")
     st.success("Configured") if TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID else st.warning("Not configured")
     if st.button("📨 Send Telegram test"):
-        ok, result = send_telegram_message(
-            f"<b>🤖 AI Market Intelligence</b>
-
-Telegram connection test successful.
-"
-            f'<a href="{DASHBOARD_URL}">Open dashboard</a>'
-        )
-        (st.success if ok else st.error)(result)
-    st.divider()
-    st.subheader("💾 Paper history")
-    st.caption(str(PAPER_FILE))
-    st.write(f"Records: {len(load_paper_history())}")
+        ok,msg=telegram(f"<b>🤖 AI Market Intelligence {VERSION}</b>\n\nTelegram connection test successful.\n<a href='{DASHBOARD_URL}'>Open dashboard</a>")
+        (st.success if ok else st.error)(msg)
+    st.divider();st.subheader("💾 Paper history");st.caption(str(PAPER_FILE));st.write(f"Records: {len(history())}")
     if st.button("🗑️ Clear local paper history"):
-        if PAPER_FILE.exists(): PAPER_FILE.unlink()
+        if PAPER_FILE.exists():PAPER_FILE.unlink()
         st.rerun()
 
-rows, diagnostics = build_dashboard_rows()
-timestamp = datetime.now(timezone.utc).isoformat()
-record_snapshot([{
-    "timestamp": timestamp, "asset": r["asset"], "source": r["source"],
-    "price": r["price"], "change_pct": r["change_pct"], "signal": r["signal"],
-    "confidence": r["confidence"], "status": r["status"],
-} for r in rows])
-df = pd.DataFrame(rows)
-
-tabs = st.tabs(["📈 Market Signals", "₿ Crypto", "🇺🇸 US / ETFs", "🇳🇬 NGX",
-                "🌏 Six Assets", "🧪 API Diagnostics", "📝 Paper History"])
-
+rows,diags=rows_and_diag()
+snapshot([{"timestamp":datetime.now(timezone.utc).isoformat(),"asset":x["asset"],"source":x["source"],"price":x["price"],"change_pct":x["change_pct"],"signal":x["signal"],"confidence":x["confidence"],"status":x["status"]} for x in rows])
+df=pd.DataFrame(rows)
+tabs=st.tabs(["📈 Market Signals","₿ Crypto","🇺🇸 US / ETFs","🇳🇬 NGX","🌏 Six Assets","🧪 API Diagnostics","📝 Paper History"])
 with tabs[0]:
     st.info("Signals/confidence are hypothetical paper-analysis outputs. They do not execute trades or determine how much money to risk.")
-    view = df.copy()
-    view["price"] = view.apply(lambda r: fmt_price(r["price"], r["currency"]), axis=1)
-    view["change_pct"] = view["change_pct"].map(lambda x: "N/A" if pd.isna(x) else f"{x:+.2f}%")
-    view["confidence"] = view["confidence"].map(lambda x: f"{x}%")
-    st.dataframe(view[["asset","name","source","price","change_pct","signal","confidence","status"]],
-                 use_container_width=True, hide_index=True)
-
-with tabs[1]:
-    st.dataframe(df[df.source == "CoinGecko"][["asset","price","change_pct","signal","confidence","status"]],
-                 use_container_width=True, hide_index=True)
-with tabs[2]:
-    st.dataframe(df[(df.source == "Yahoo Finance") & (df.asset.isin(US_ASSETS))][
-        ["asset","name","price","change_pct","signal","confidence","status"]],
-        use_container_width=True, hide_index=True)
+    v=df.copy();v["price"]=v.apply(lambda r:fmt(r["price"],r["currency"]),axis=1);v["change_pct"]=v["change_pct"].map(lambda x:"N/A" if pd.isna(x) else f"{x:+.2f}%");v["confidence"]=v["confidence"].map(lambda x:f"{x}%")
+    st.dataframe(v[["asset","name","source","price","change_pct","signal","confidence","status"]],use_container_width=True,hide_index=True)
+with tabs[1]:st.dataframe(df[df.source=="CoinGecko"][["asset","price","change_pct","signal","confidence","status"]],use_container_width=True,hide_index=True)
+with tabs[2]:st.dataframe(df[(df.source=="Yahoo Finance")&df.asset.isin(US_ASSETS)][["asset","name","price","change_pct","signal","confidence","status"]],use_container_width=True,hide_index=True)
 with tabs[3]:
-    if not NGXPULSE_API_KEY: st.warning("Add NGXPULSE_API_KEY to Streamlit Secrets to enable NGX data.")
-    st.dataframe(df[df.source == "NGX Pulse"][["asset","name","price","change_pct","signal","confidence","status"]],
-                 use_container_width=True, hide_index=True)
-with tabs[4]:
-    st.dataframe(df[df.asset.isin(SIX_ASSETS)][["asset","name","price","change_pct","signal","confidence","status"]],
-                 use_container_width=True, hide_index=True)
+    d=next((x for n,x in diags if n=="NGX Pulse /stocks"),{})
+    if d.get("status")==200 and not d.get("error"):st.success(f"NGX Pulse connected — received {d.get('count',0)} stock records.")
+    else:st.error(f"NGX data unavailable. HTTP status: {d.get('status','N/A')} | Reason: {d.get('error','Unknown error')}")
+    st.caption(f"Endpoint: {d.get('endpoint',NGX+'/api/ngxdata/stocks')}")
+    st.dataframe(df[df.source=="NGX Pulse"][["asset","name","price","change_pct","signal","confidence","status"]],use_container_width=True,hide_index=True)
+with tabs[4]:st.dataframe(df[df.asset.isin(SIX_ASSETS)][["asset","name","price","change_pct","signal","confidence","status"]],use_container_width=True,hide_index=True)
 with tabs[5]:
-    diag_rows = [{"source": s, "HTTP status": d.get("status"), "request time (s)": d.get("elapsed"),
-                  "status": "OK" if not d.get("error") else "FAILED",
-                  "reason": d.get("error") or "Request successful"} for s, d in diagnostics]
-    st.dataframe(pd.DataFrame(diag_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame([{"source":n,"HTTP status":d.get("status"),"request time (s)":d.get("elapsed"),"records":d.get("count",""),"status":"OK" if not d.get("error") else "FAILED","endpoint":d.get("endpoint",""),"exact reason":d.get("error") or "Request successful"} for n,d in diags]),use_container_width=True,hide_index=True)
 with tabs[6]:
-    history = load_paper_history()
-    if history.empty: st.info("No paper-trade snapshots recorded yet.")
+    h=history()
+    if h.empty:st.info("No paper-trade snapshots recorded yet.")
     else:
-        st.dataframe(history.tail(500), use_container_width=True, hide_index=True)
-        st.download_button("⬇️ Download paper history CSV", history.to_csv(index=False),
-                           file_name="paper_trade_history.csv", mime="text/csv")
+        st.dataframe(h.tail(500),use_container_width=True,hide_index=True)
+        st.download_button("⬇️ Download paper history CSV",h.to_csv(index=False),file_name="paper_trade_history.csv",mime="text/csv")
