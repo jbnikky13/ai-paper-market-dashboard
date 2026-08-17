@@ -3,7 +3,6 @@ name: AI Market Telegram Updates
 on:
   workflow_dispatch:
   schedule:
-    # Every hour at minute 17 UTC
     - cron: "17 * * * *"
 
 permissions:
@@ -37,18 +36,20 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Restore news deduplication state
-        uses: actions/cache@v4
+      - name: Restore news state
+        uses: actions/cache/restore@v4
         with:
-          path: news_seen.txt
-          key: news-seen-${{ github.ref_name }}-${{ github.run_id }}
+          path: news_seen.json
+          key: news-state-${{ github.ref_name }}-${{ github.run_id }}
           restore-keys: |
-            news-seen-${{ github.ref_name }}-
+            news-state-${{ github.ref_name }}-
 
       - name: Send market and news update
         run: python telegram_bot.py
 
-      - name: Check news deduplication state
+      - name: Save news state
         if: always()
-        run: |
-          echo "News state contains $(wc -l < news_seen.txt 2>/dev/null || echo 0) keys"
+        uses: actions/cache/save@v4
+        with:
+          path: news_seen.json
+          key: news-state-${{ github.ref_name }}-${{ github.run_id }}
