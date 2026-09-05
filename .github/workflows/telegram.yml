@@ -15,7 +15,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -44,8 +44,19 @@ jobs:
           restore-keys: |
             news-state-${{ github.ref_name }}-
 
+      - name: Restore financial filing state
+        uses: actions/cache/restore@v4
+        with:
+          path: financial_seen.json
+          key: financial-state-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            financial-state-${{ github.ref_name }}-
+
       - name: Send market and news update
         run: python telegram_bot.py
+
+      - name: Send new quarterly financial updates
+        run: python quarterly_financial_bot.py
 
       - name: Save news state
         if: always()
@@ -53,3 +64,10 @@ jobs:
         with:
           path: news_seen.json
           key: news-state-${{ github.ref_name }}-${{ github.run_id }}
+
+      - name: Save financial filing state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: financial_seen.json
+          key: financial-state-${{ github.ref_name }}-${{ github.run_id }}
