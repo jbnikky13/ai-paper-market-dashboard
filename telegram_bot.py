@@ -8,19 +8,18 @@ CHANNEL=os.getenv("TELEGRAM_CHANNEL_ID","").strip()
 NGX_KEY=os.getenv("NGXPULSE_API_KEY","").strip()
 CG_KEY=os.getenv("COINGECKO_DEMO_API_KEY","").strip()
 GNEWS_KEY=os.getenv("GNEWS_API_KEY","").strip()
-VERSION="v5.2"
+VERSION="v5.3"
 CG="https://api.coingecko.com/api/v3"; YAHOO="https://query1.finance.yahoo.com/v8/finance/chart"; NGX="https://www.ngxpulse.ng"
 CRYPTO={"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB","ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
 US={"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft","GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
 NGX_ASSETS={"DANGCEM":"Dangote Cement","GTCO":"GTCO","ZENITHBANK":"Zenith Bank","ACCESSCORP":"Access Holdings","UBA":"UBA","FIRSTHOLDCO":"First HoldCo","MTNN":"MTN Nigeria","AIRTELAFRI":"Airtel Africa","BUAFOODS":"BUA Foods","BUACEMENT":"BUA Cement","SEPLAT":"Seplat Energy","ARADEL":"Aradel Holdings","PRESCO":"Presco","NB":"Nigerian Breweries","FLOURMILL":"Flour Mills"}
 SIX={"3308.HK":"ZhongJi InnoLight","042700.KS":"Hanmi Semiconductor","009150.KS":"Samsung Electro-Mechanics","066570.KS":"LG Electronics","035420.KS":"NAVER","069500.KS":"KODEX 200 ETF"}
 
-
 def req(url,params=None,headers=None):
     last=None
     for i in range(2):
         try:
-            r=requests.get(url,params=params,headers=headers or {"User-Agent":"AI-Market-Intelligence/5.2"},timeout=15)
+            r=requests.get(url,params=params,headers=headers or {"User-Agent":"AI-Market-Intelligence/5.3"},timeout=15)
             if r.ok:return r,None
             last=f"HTTP {r.status_code}: {(r.text or '')[:250]}"
             if r.status_code not in (408,425,429,500,502,503,504):break
@@ -28,35 +27,11 @@ def req(url,params=None,headers=None):
         time.sleep(1+i)
     return None,last
 
-
-def outlook(change):
-    if change is None:return "NO DATA",0
-    c=float(change)
-    if c>=2:return "BULLISH",min(95,round(55+abs(c)*5))
-    if c<=-2:return "BEARISH",min(95,round(55+abs(c)*5))
-    return "NEUTRAL",max(50,min(75,round(60+abs(c)*2)))
-
-
-def day_trade_score(change,conf,volume=None,avg_volume=None):
-    """Rank daily research candidates by day-trading relevance, without issuing a trade setup.
-    Higher score favors meaningful intraday movement, directional conviction and (when available)
-    volume confirmation. It is a ranking score, not a probability of profit.
-    """
-    if change is None:return 0.0
-    move=min(abs(float(change)),10.0)
-    score=move*5.0 + float(conf)*0.45
-    if volume and avg_volume and avg_volume>0:
-        ratio=float(volume)/float(avg_volume)
-        score += min(15.0,max(0.0,(ratio-1.0)*10.0))
-    return round(score,2)
-
-
 def crypto():
-    h={"User-Agent":"AI-Market-Intelligence/5.2"}
+    h={"User-Agent":"AI-Market-Intelligence/5.3"}
     if CG_KEY:h["x-cg-demo-api-key"]=CG_KEY
-    r,e=req(f"{CG}/simple/price",{"ids":",".join(CRYPTO),"vs_currencies":"usd","include_24hr_change":"true","include_24hr_vol":"true"},h)
+    r,e=req(f"{CG}/simple/price",{"ids":",".join(CRYPTO),"vs_currencies":"usd","include_24hr_change":"true"},h)
     return (r.json() if r else {}),e
-
 
 def yahoo(symbol):
     r,e=req(f"{YAHOO}/{symbol}",{"range":"1mo","interval":"1d","includePrePost":"false"},{"User-Agent":"Mozilla/5.0"})
@@ -64,27 +39,16 @@ def yahoo(symbol):
     try:
         z=r.json()["chart"]["result"][0]; m=z.get("meta",{}); q=z.get("indicators",{}).get("quote",[{}])[0]
         cl=[float(x) for x in q.get("close",[]) if x is not None]
-        vols=[float(x) for x in q.get("volume",[]) if x is not None and float(x)>0]
         p=m.get("regularMarketPrice") or (cl[-1] if cl else None)
         prev=m.get("previousClose") or (cl[-2] if len(cl)>1 else None)
         if p is None:return None,"Yahoo returned no price"
-        avg_volume=sum(vols[-20:])/len(vols[-20:]) if vols else None
-        return ({
-            "price":float(p),
-            "change":((float(p)/float(prev))-1)*100 if prev else None,
-            "currency":m.get("currency") or "USD",
-            "name":m.get("longName") or m.get("shortName") or symbol,
-            "source":"Yahoo Finance",
-            "volume":vols[-1] if vols else None,
-            "avg_volume":avg_volume,
-        }),None
+        return {"price":float(p),"change":((float(p)/float(prev))-1)*100 if prev else None,"currency":m.get("currency") or "USD","name":m.get("longName") or m.get("shortName") or symbol,"source":"Yahoo Finance"},None
     except Exception as x:return None,str(x)
-
 
 def ngx():
     primary={}
     if NGX_KEY:
-        r,e=req(f"{NGX}/api/ngxdata/stocks",headers={"X-API-Key":NGX_KEY,"Content-Type":"application/json","User-Agent":"AI-Market-Intelligence/5.2"})
+        r,e=req(f"{NGX}/api/ngxdata/stocks",headers={"X-API-Key":NGX_KEY,"Content-Type":"application/json","User-Agent":"AI-Market-Intelligence/5.3"})
         if r:
             try:
                 body=r.json(); rows=body if isinstance(body,list) else (body.get("data") or body.get("stocks") or [])
@@ -105,53 +69,44 @@ def ngx():
             x["name"]=name;x["currency"]=x.get("currency") or "NGN";x["status"]="FALLBACK";fallback[s]=x
     return fallback,"FALLBACK" if fallback else "UNAVAILABLE"
 
-
 def money(price,currency):
     symbols={"USD":"$","NGN":"₦","KRW":"₩","HKD":"HK$","JPY":"¥","EUR":"€","GBP":"£"}
     return f"{symbols.get(currency,currency+' ')}{price:,.2f}"
 
-
-def add_rank(row):
-    row["day_score"]=day_trade_score(row.get("change"),row.get("conf"),row.get("volume"),row.get("avg_volume"))
-    return row
-
-
 def market_message():
-    rows=[]
+    crypto_rows=[]; stock_rows=[]
     c,_=crypto()
     for cid,s in CRYPTO.items():
         x=c.get(cid,{})
-        if x.get("usd") is not None:
-            label,conf=outlook(x.get("usd_24h_change"));rows.append(add_rank({"symbol":s,"name":s,"market":"Crypto","price":x.get("usd"),"change":x.get("usd_24h_change"),"label":label,"conf":conf,"currency":"USD","source":"CoinGecko","volume":x.get("usd_24h_vol"),"avg_volume":None}))
+        if x.get("usd") is not None:crypto_rows.append({"symbol":s,"name":s,"price":x.get("usd"),"change":x.get("usd_24h_change"),"currency":"USD","source":"CoinGecko"})
     for s,n in US.items():
         x,_=yahoo(s)
-        if x:
-            label,conf=outlook(x.get("change"));rows.append(add_rank({"symbol":s,"name":n or x.get("name",s),"market":"US / ETFs","price":x["price"],"change":x.get("change"),"label":label,"conf":conf,"currency":x.get("currency","USD"),"source":x.get("source","Yahoo Finance"),"volume":x.get("volume"),"avg_volume":x.get("avg_volume")}))
+        if x:stock_rows.append({"symbol":s,"name":n or x.get("name",s),"price":x["price"],"change":x.get("change"),"currency":x.get("currency","USD"),"source":x.get("source","Yahoo Finance"),"market":"US / ETFs"})
     n,mode=ngx()
     for s,name in NGX_ASSETS.items():
         x=n.get(s)
-        if x:
-            label,conf=outlook(x.get("change"));rows.append(add_rank({"symbol":s,"name":name,"market":"NGX","price":x["price"],"change":x.get("change"),"label":label,"conf":conf,"currency":x.get("currency","NGN"),"source":x.get("source",mode),"volume":x.get("volume"),"avg_volume":x.get("avg_volume")}))
+        if x:stock_rows.append({"symbol":s,"name":name,"price":x["price"],"change":x.get("change"),"currency":x.get("currency","NGN"),"source":x.get("source",mode),"market":"NGX"})
     for s,name in SIX.items():
         x,_=yahoo(s)
-        if x:
-            label,conf=outlook(x.get("change"));rows.append(add_rank({"symbol":s,"name":name,"market":"Asia / SIX","price":x["price"],"change":x.get("change"),"label":label,"conf":conf,"currency":x.get("currency","USD"),"source":x.get("source","Yahoo Finance"),"volume":x.get("volume"),"avg_volume":x.get("avg_volume")}))
+        if x:stock_rows.append({"symbol":s,"name":name,"price":x["price"],"change":x.get("change"),"currency":x.get("currency","USD"),"source":x.get("source","Yahoo Finance"),"market":"Asia / SIX"})
 
-    # Daily market-opportunity ranking: prioritize assets that are actually moving today,
-    # have directional conviction, and have volume confirmation when the data provider supplies it.
-    # This is intentionally NOT a trade setup, entry signal, or probability-of-profit model.
-    rows.sort(key=lambda x:(x["day_score"],x["conf"],abs(x.get("change") or 0)),reverse=True)
-    lines=[f"<b>🤖 AI MARKET INTELLIGENCE {VERSION}</b>",f"<i>{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</i>","","<b>🏆 TOP DAILY MARKET OPPORTUNITIES</b>","<i>Research ranking for today's most active directional opportunities — no trade setups or execution.</i>"]
-    for i,x in enumerate(rows[:8],1):
-        label=x["label"]; icon="🟢" if label=="BULLISH" else ("🔴" if label=="BEARISH" else "🟡")
+    lines=[f"<b>🤖 AI MARKET INTELLIGENCE {VERSION}</b>",f"<i>{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</i>","","<b>₿ CRYPTOCURRENCY PRICES</b>","<i>Latest available prices at the time of this bot update.</i>"]
+    for x in crypto_rows:
         change="N/A" if x.get("change") is None else f"{x['change']:+.2f}%"
-        lines.append(f"{i}. {icon} <b>{html.escape(x['name'])}</b> ({html.escape(x['symbol'])}) — {money(x['price'],x['currency'])} ({change}) • {label} {x['conf']}% • Day score {x['day_score']} • {x['market']} • {x['currency']} • {x['source']}")
-    lines += ["","<i>Ranking factors: today's price movement + directional conviction + available volume confirmation. Scores are research rankings, not trade probabilities.</i>","",f"🇳🇬 <b>NGX DATA: {mode}</b>"]
+        icon="🟢" if (x.get("change") or 0)>0 else ("🔴" if (x.get("change") or 0)<0 else "🟡")
+        lines.append(f"{icon} <b>{html.escape(x['name'])}</b> ({x['symbol']}) — {money(x['price'],x['currency'])} ({change}) • {x['currency']} • {x['source']}")
+
+    lines += ["","<b>📈 STOCK & ETF PRICES</b>","<i>Latest available prices across US/ETFs, NGX and Asia.</i>"]
+    for x in stock_rows:
+        change="N/A" if x.get("change") is None else f"{x['change']:+.2f}%"
+        icon="🟢" if (x.get("change") or 0)>0 else ("🔴" if (x.get("change") or 0)<0 else "🟡")
+        lines.append(f"{icon} <b>{html.escape(x['name'])}</b> ({html.escape(x['symbol'])}) — {money(x['price'],x['currency'])} ({change}) • {x['market']} • {x['currency']} • {x['source']}")
+
+    lines += ["",f"🇳🇬 <b>NGX DATA: {mode}</b>"]
     if mode=="LIVE":lines.append("<i>Source: NGX Pulse</i>")
     elif mode=="FALLBACK":lines.append("<i>NGX Pulse failed; validated Yahoo Finance quotes are being used as the live fallback.</i>")
     else:lines.append("<i>NGX Pulse and Yahoo Finance fallback both failed; no NGX prices are fabricated.</i>")
     return "\n".join(lines)
-
 
 def send(msg):
     if not TOKEN:return False,"TELEGRAM_BOT_TOKEN is missing."
@@ -161,11 +116,9 @@ def send(msg):
         return (True,"Telegram message sent.") if r.ok else (False,f"HTTP {r.status_code}: {r.text[:500]}")
     except Exception as e:return False,str(e)
 
-
 if __name__=="__main__":
     global_news,global_provider=fetch_market_news(GNEWS_KEY,limit=8)
     africa_news,africa_provider=fetch_africa_business_news(GNEWS_KEY,limit=8)
-    msg=(market_message()+"\n\n"+render_global_telegram(global_news,limit=8)+"\n\n"+render_telegram(africa_news,limit=8)+
-         f"\n\n<i>Global news provider: {html.escape(global_provider)} | Africa news provider: {html.escape(africa_provider)}</i>\n\nℹ️ Hypothetical paper-analysis only. No trades are executed.")
+    msg=(market_message()+"\n\n"+render_global_telegram(global_news,limit=8)+"\n\n"+render_telegram(africa_news,limit=8)+f"\n\n<i>Global news provider: {html.escape(global_provider)} | Africa news provider: {html.escape(africa_provider)}</i>\n\nℹ️ Hypothetical paper-analysis only. No trades are executed.")
     ok,result=send(msg);print(result)
     if not ok:raise SystemExit(1)
