@@ -8,7 +8,7 @@ CHANNEL=os.getenv("TELEGRAM_CHANNEL_ID","").strip()
 NGX_KEY=os.getenv("NGXPULSE_API_KEY","").strip()
 CG_KEY=os.getenv("COINGECKO_DEMO_API_KEY","").strip()
 GNEWS_KEY=os.getenv("GNEWS_API_KEY","").strip()
-VERSION="v5.5"
+VERSION="v5.6"
 CG="https://api.coingecko.com/api/v3"; YAHOO="https://query1.finance.yahoo.com/v8/finance/chart"; NGX="https://www.ngxpulse.ng"
 CRYPTO={"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB","ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
 US={"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft","GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
@@ -18,7 +18,7 @@ def req(url,params=None,headers=None):
     last=None
     for i in range(2):
         try:
-            r=requests.get(url,params=params,headers=headers or {"User-Agent":"AI-Market-Intelligence/5.5"},timeout=15)
+            r=requests.get(url,params=params,headers=headers or {"User-Agent":"AI-Market-Intelligence/5.6"},timeout=15)
             if r.ok:return r,None
             last=f"HTTP {r.status_code}: {(r.text or '')[:250]}"
             if r.status_code not in (408,425,429,500,502,503,504):break
@@ -27,7 +27,7 @@ def req(url,params=None,headers=None):
     return None,last
 
 def crypto():
-    h={"User-Agent":"AI-Market-Intelligence/5.5"}
+    h={"User-Agent":"AI-Market-Intelligence/5.6"}
     if CG_KEY:h["x-cg-demo-api-key"]=CG_KEY
     r,e=req(f"{CG}/simple/price",{"ids":",".join(CRYPTO),"vs_currencies":"usd","include_24hr_change":"true"},h)
     return (r.json() if r else {}),e
@@ -47,7 +47,7 @@ def yahoo(symbol):
 def ngx():
     primary={}
     if NGX_KEY:
-        r,e=req(f"{NGX}/api/ngxdata/stocks",headers={"X-API-Key":NGX_KEY,"Content-Type":"application/json","User-Agent":"AI-Market-Intelligence/5.5"})
+        r,e=req(f"{NGX}/api/ngxdata/stocks",headers={"X-API-Key":NGX_KEY,"Content-Type":"application/json","User-Agent":"AI-Market-Intelligence/5.6"})
         if r:
             try:
                 body=r.json(); rows=body if isinstance(body,list) else (body.get("data") or body.get("stocks") or [])
@@ -100,9 +100,9 @@ def market_lines():
     return lines
 
 def build_sections():
-    global_news,global_provider=fetch_market_news(GNEWS_KEY,limit=8)
-    africa_news,africa_provider=fetch_africa_business_news(GNEWS_KEY,limit=8)
-    return market_lines(),render_global_telegram(global_news,limit=8),render_telegram(africa_news,limit=8),global_provider,africa_provider
+    global_news,global_provider=fetch_market_news(GNEWS_KEY,limit=4)
+    africa_news,africa_provider=fetch_africa_business_news(GNEWS_KEY,limit=4)
+    return market_lines(),render_global_telegram(global_news,limit=4),render_telegram(africa_news,limit=4),global_provider,africa_provider
 
 def split_html(text,limit=3500):
     if len(text)<=limit:return [text]
