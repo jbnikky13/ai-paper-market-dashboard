@@ -8,7 +8,7 @@ CHANNEL=os.getenv("TELEGRAM_CHANNEL_ID","").strip()
 NGX_KEY=os.getenv("NGXPULSE_API_KEY","").strip()
 CG_KEY=os.getenv("COINGECKO_DEMO_API_KEY","").strip()
 GNEWS_KEY=os.getenv("GNEWS_API_KEY","").strip()
-VERSION="v5.3"
+VERSION="v5.4"
 CG="https://api.coingecko.com/api/v3"; YAHOO="https://query1.finance.yahoo.com/v8/finance/chart"; NGX="https://www.ngxpulse.ng"
 CRYPTO={"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB","ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
 US={"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft","GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
@@ -19,7 +19,7 @@ def req(url,params=None,headers=None):
     last=None
     for i in range(2):
         try:
-            r=requests.get(url,params=params,headers=headers or {"User-Agent":"AI-Market-Intelligence/5.3"},timeout=15)
+            r=requests.get(url,params=params,headers=headers or {"User-Agent":"AI-Market-Intelligence/5.4"},timeout=15)
             if r.ok:return r,None
             last=f"HTTP {r.status_code}: {(r.text or '')[:250]}"
             if r.status_code not in (408,425,429,500,502,503,504):break
@@ -28,7 +28,7 @@ def req(url,params=None,headers=None):
     return None,last
 
 def crypto():
-    h={"User-Agent":"AI-Market-Intelligence/5.3"}
+    h={"User-Agent":"AI-Market-Intelligence/5.4"}
     if CG_KEY:h["x-cg-demo-api-key"]=CG_KEY
     r,e=req(f"{CG}/simple/price",{"ids":",".join(CRYPTO),"vs_currencies":"usd","include_24hr_change":"true"},h)
     return (r.json() if r else {}),e
@@ -48,7 +48,7 @@ def yahoo(symbol):
 def ngx():
     primary={}
     if NGX_KEY:
-        r,e=req(f"{NGX}/api/ngxdata/stocks",headers={"X-API-Key":NGX_KEY,"Content-Type":"application/json","User-Agent":"AI-Market-Intelligence/5.3"})
+        r,e=req(f"{NGX}/api/ngxdata/stocks",headers={"X-API-Key":NGX_KEY,"Content-Type":"application/json","User-Agent":"AI-Market-Intelligence/5.4"})
         if r:
             try:
                 body=r.json(); rows=body if isinstance(body,list) else (body.get("data") or body.get("stocks") or [])
@@ -73,7 +73,7 @@ def money(price,currency):
     symbols={"USD":"$","NGN":"₦","KRW":"₩","HKD":"HK$","JPY":"¥","EUR":"€","GBP":"£"}
     return f"{symbols.get(currency,currency+' ')}{price:,.2f}"
 
-def market_message():
+def market_lines():
     crypto_rows=[]; stock_rows=[]
     c,_=crypto()
     for cid,s in CRYPTO.items():
@@ -89,36 +89,54 @@ def market_message():
     for s,name in SIX.items():
         x,_=yahoo(s)
         if x:stock_rows.append({"symbol":s,"name":name,"price":x["price"],"change":x.get("change"),"currency":x.get("currency","USD"),"source":x.get("source","Yahoo Finance"),"market":"Asia / SIX"})
-
     lines=[f"<b>🤖 AI MARKET INTELLIGENCE {VERSION}</b>",f"<i>{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</i>","","<b>₿ CRYPTOCURRENCY PRICES</b>","<i>Latest available prices at the time of this bot update.</i>"]
     for x in crypto_rows:
-        change="N/A" if x.get("change") is None else f"{x['change']:+.2f}%"
-        icon="🟢" if (x.get("change") or 0)>0 else ("🔴" if (x.get("change") or 0)<0 else "🟡")
+        change="N/A" if x.get("change") is None else f"{x['change']:+.2f}%"; icon="🟢" if (x.get("change") or 0)>0 else ("🔴" if (x.get("change") or 0)<0 else "🟡")
         lines.append(f"{icon} <b>{html.escape(x['name'])}</b> ({x['symbol']}) — {money(x['price'],x['currency'])} ({change}) • {x['currency']} • {x['source']}")
-
     lines += ["","<b>📈 STOCK & ETF PRICES</b>","<i>Latest available prices across US/ETFs, NGX and Asia.</i>"]
     for x in stock_rows:
-        change="N/A" if x.get("change") is None else f"{x['change']:+.2f}%"
-        icon="🟢" if (x.get("change") or 0)>0 else ("🔴" if (x.get("change") or 0)<0 else "🟡")
+        change="N/A" if x.get("change") is None else f"{x['change']:+.2f}%"; icon="🟢" if (x.get("change") or 0)>0 else ("🔴" if (x.get("change") or 0)<0 else "🟡")
         lines.append(f"{icon} <b>{html.escape(x['name'])}</b> ({html.escape(x['symbol'])}) — {money(x['price'],x['currency'])} ({change}) • {x['market']} • {x['currency']} • {x['source']}")
-
     lines += ["",f"🇳🇬 <b>NGX DATA: {mode}</b>"]
     if mode=="LIVE":lines.append("<i>Source: NGX Pulse</i>")
-    elif mode=="FALLBACK":lines.append("<i>NGX Pulse failed; validated Yahoo Finance quotes are being used as the live fallback.</i>")
+    elif mode=="FALLBACK":lines.append("<i>NGX Pulse failed; validated Yahoo Finance quotes are being used as the fallback.</i>")
     else:lines.append("<i>NGX Pulse and Yahoo Finance fallback both failed; no NGX prices are fabricated.</i>")
-    return "\n".join(lines)
+    return lines
 
-def send(msg):
-    if not TOKEN:return False,"TELEGRAM_BOT_TOKEN is missing."
-    if not CHANNEL:return False,"TELEGRAM_CHANNEL_ID is missing."
-    try:
-        r=requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",json={"chat_id":CHANNEL,"text":msg,"parse_mode":"HTML","disable_web_page_preview":False},timeout=20)
-        return (True,"Telegram message sent.") if r.ok else (False,f"HTTP {r.status_code}: {r.text[:500]}")
-    except Exception as e:return False,str(e)
-
-if __name__=="__main__":
+def build_sections():
     global_news,global_provider=fetch_market_news(GNEWS_KEY,limit=8)
     africa_news,africa_provider=fetch_africa_business_news(GNEWS_KEY,limit=8)
-    msg=(market_message()+"\n\n"+render_global_telegram(global_news,limit=8)+"\n\n"+render_telegram(africa_news,limit=8)+f"\n\n<i>Global news provider: {html.escape(global_provider)} | Africa news provider: {html.escape(africa_provider)}</i>\n\nℹ️ Hypothetical paper-analysis only. No trades are executed.")
-    ok,result=send(msg);print(result)
+    return market_lines(),render_global_telegram(global_news,limit=8),render_telegram(africa_news,limit=8),global_provider,africa_provider
+
+def split_html(text,limit=3500):
+    if len(text)<=limit:return [text]
+    parts=[]; cur=""
+    for line in text.split("\n"):
+        candidate=line if not cur else cur+"\n"+line
+        if len(candidate)>limit and cur:
+            parts.append(cur);cur=line
+        else:cur=candidate
+    if cur:parts.append(cur)
+    return parts
+
+def send(messages):
+    if not TOKEN:return False,"TELEGRAM_BOT_TOKEN is missing."
+    if not CHANNEL:return False,"TELEGRAM_CHANNEL_ID is missing."
+    if isinstance(messages,str):messages=split_html(messages)
+    for i,msg in enumerate(messages,1):
+        try:
+            r=requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",json={"chat_id":CHANNEL,"text":msg,"parse_mode":"HTML","disable_web_page_preview":False},timeout=20)
+            if not r.ok:return False,f"Message {i}/{len(messages)} failed: HTTP {r.status_code}: {r.text[:500]}"
+        except Exception as e:return False,f"Message {i}/{len(messages)} failed: {e}"
+    return True,f"Telegram sent successfully in {len(messages)} message(s)."
+
+if __name__=="__main__":
+    market,global_html,africa_html,gp,ap=build_sections()
+    header="\n".join(market)
+    footer=f"<i>Global news provider: {html.escape(gp)} | Africa news provider: {html.escape(ap)}</i>\n\nℹ️ Hypothetical paper-analysis only. No trades are executed."
+    # Keep sections intact where possible; the splitter provides a final hard limit safety net.
+    sections=[header,global_html,africa_html,footer]
+    messages=[]
+    for section in sections:messages.extend(split_html(section,limit=3500))
+    ok,result=send(messages);print(result)
     if not ok:raise SystemExit(1)
