@@ -63,22 +63,11 @@ jobs:
           restore-keys: |
             financial-state-${{ github.ref_name }}-
 
-      - name: Restore Nigeria IPO state
-        uses: actions/cache/restore@v4
-        with:
-          path: ng_ipo_seen.json
-          key: ng-ipo-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            ng-ipo-state-${{ github.ref_name }}-
-
       - name: Send market and news update
         run: python telegram_bot.py
 
       - name: Send new quarterly financial updates
         run: python quarterly_financial_bot.py
-
-      - name: Scan SEC Nigeria and NGX public offers
-        run: python ng_ipo_bot.py
 
       - name: Save news state
         if: always()
@@ -93,10 +82,3 @@ jobs:
         with:
           path: financial_seen.json
           key: financial-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-      - name: Save Nigeria IPO state
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: ng_ipo_seen.json
-          key: ng-ipo-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
