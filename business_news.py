@@ -1,12 +1,27 @@
 import html
 import re
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 import requests
 import xml.etree.ElementTree as ET
 
 GNEWS = "https://gnews.io/api/v4"
-UA = {"User-Agent": "AI-Market-Intelligence/5.1"}
+UA = {"User-Agent": "AI-Market-Intelligence/5.8"}
+
+# Sources that commonly require a subscription, account, or paywall before the
+# reader can access the article. These are excluded so Telegram links remain
+# directly readable without a sign-up.
+BLOCKED_NEWS_DOMAINS = {
+    "theafricareport.com",
+    "ft.com",
+    "wsj.com",
+    "bloomberg.com",
+    "economist.com",
+    "barrons.com",
+    "businessinsider.com",
+    "nytimes.com",
+    "washingtonpost.com",
+}
 
 GLOBAL_QUERIES = [
     "global markets stocks economy business investment",
@@ -43,6 +58,19 @@ NOISE_TERMS = {
 }
 
 
+def _domain(url):
+    try:
+        host = urlparse(url).netloc.lower().split(":")[0]
+        return host[4:] if host.startswith("www.") else host
+    except Exception:
+        return ""
+
+
+def _blocked_url(url):
+    host = _domain(url)
+    return any(host == d or host.endswith("." + d) for d in BLOCKED_NEWS_DOMAINS)
+
+
 def _score(title, description="", region="Global"):
     text = f"{title} {description}".lower()
     score = 0
@@ -74,7 +102,8 @@ def _clean(items, forced_region=None):
     out, seen = [], set()
     for a in items:
         title = (a.get("title") or "").strip()
-        if not title:
+        url = (a.get("url") or "").strip()
+        if not title or not url or _blocked_url(url):
             continue
         key = re.sub(r"\W+", " ", title.lower()).strip()
         if key in seen:
