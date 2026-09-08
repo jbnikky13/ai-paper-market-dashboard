@@ -62,17 +62,41 @@ def _region(title,description="",forced=None):
     if any(x in text for x in ("africa","african","ghana","kenya","south africa","egypt","morocco")):return "Africa"
     return "Global"
 
+def _parse_published(value):
+    if not value:return None
+    raw=str(value).strip()
+    candidates=[raw]
+    if raw.endswith("Z"):candidates.append(raw[:-1]+"+00:00")
+    for candidate in candidates:
+        try:
+            dt=datetime.fromisoformat(candidate)
+            if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except ValueError:pass
+    try:
+        from email.utils import parsedate_to_datetime
+        dt=parsedate_to_datetime(raw)
+        if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except (TypeError,ValueError):
+        return None
+
+def _is_today(value):
+    dt=_parse_published(value)
+    return dt is not None and dt.date()==datetime.now(timezone.utc).date()
+
 def _clean(items,forced=None):
     out=[];keys=set()
     for a in items:
-        title=str(a.get("title") or "").strip();url=str(a.get("url") or "").strip()
+        title=str(a.get("title") or "").strip();url=str(a.get("url") or "").strip();published=str(a.get("publishedAt") or "").strip()
         if not title or not url or not url.startswith(("http://","https://")):continue
+        if not _is_today(published):continue
         key=_normal_title(title)
         if key in keys:continue
         keys.add(key);region=_region(title,a.get("description",""),forced);score=_score(title,a.get("description",""),region)
         if score<3:continue
         a["relevance"]=min(100,max(0,50+score*5));a["region"]=region;out.append(a)
-    return sorted(out,key=lambda x:(x.get("relevance",0),x.get("publishedAt","")),reverse=True)
+    return sorted(out,key=lambda x:_parse_published(x.get("publishedAt")) or datetime.min.replace(tzinfo=timezone.utc),reverse=True)
 
 def _gnews(api_key,queries,forced=None,max_per=8):
     if not api_key:return []
@@ -103,8 +127,7 @@ def _infera_story(a):
     src=a.get("source");src=src.get("name") if isinstance(src,dict) else src
     rel=0
     for key in ("marketRelevanceScore","market_relevance_score","marketRelevance","market_relevance","importanceScore","importance_score","trendScore","trend_score"):
-        if a.get(key) is not None:
-            rel=a.get(key);break
+        if a.get(key) is not None:rel=a.get(key);break
     try:rel=max(0,min(100,round(float(rel))))
     except Exception:rel=0
     return {"title":title,"description":str(a.get("summary") or a.get("description") or ""),"url":url,"source":str(src or "Infera"),"publishedAt":str(a.get("publishedAt") or a.get("published_at") or ""),"provider":"Infera","relevance":rel,"region":a.get("region") or "Global"}
