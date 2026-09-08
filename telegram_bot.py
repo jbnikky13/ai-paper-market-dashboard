@@ -8,7 +8,7 @@ CHANNEL=os.getenv("TELEGRAM_CHANNEL_ID","").strip()
 KOBO_KEY=(os.getenv("KOBO_API_KEY","").strip() or os.getenv("NGXPULSE_API_KEY","").strip())
 CG_KEY=os.getenv("COINGECKO_DEMO_API_KEY","").strip()
 GNEWS_KEY=os.getenv("GNEWS_API_KEY","").strip()
-VERSION="v6.2.1"
+VERSION="v6.2.2"
 CG="https://api.coingecko.com/api/v3"; YAHOO="https://query1.finance.yahoo.com/v8/finance/chart"; KOBO="https://koboterminal.com/api"
 CRYPTO={"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB","ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
 US={"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft","GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
@@ -48,7 +48,6 @@ def kobo_request(path,timeout=20):
     return req(f"{KOBO}{path}",headers={"X-API-Key":KOBO_KEY,"Content-Type":"application/json","User-Agent":f"AI-Market-Intelligence/{VERSION}"},timeout=timeout)
 
 def kobo_ngx():
-    """Primary NGX provider. Current Kobo Terminal API only; no legacy ngxpulse.ng endpoint."""
     if not KOBO_KEY:return {},"NO_KEY","Kobo Terminal"
     r,e=kobo_request("/ngxdata/stocks",20)
     if not r:return {},"ERROR","Kobo Terminal"
@@ -123,8 +122,7 @@ def send(messages):
     return True,f"Telegram sent successfully in {len(messages)} message(s)."
 
 if __name__=="__main__":
-    market=market_lines();global_news,_=fetch_market_news(GNEWS_KEY,4);messages=[]
-    # No separate Africa/Nigeria section. Infera/global intelligence is the single bot news feed.
-    for section in ["\n".join(market),render_global_telegram(global_news,4)]:messages.extend(split_html(section))
+    market=market_lines();global_news,_=fetch_market_news(GNEWS_KEY,8);messages=[]
+    for section in ["\n".join(market),render_global_telegram(global_news,8)]:messages.extend(split_html(section))
     ok,result=send(messages);print(result)
     if not ok:raise SystemExit(1)
