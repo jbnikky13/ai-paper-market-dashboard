@@ -1,12 +1,14 @@
 import html, hashlib, json, os, re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
 import requests
+from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 
 GNEWS="https://gnews.io/api/v4"
 INFERA_DEFAULT_URL="https://infera-ten.vercel.app"
+INFERA_BUSINESS_TOPIC=f"{INFERA_DEFAULT_URL}/topic/business"
 UA={"User-Agent":"AI-Market-Intelligence/6.0"}
 STATE_FILE=Path("news_seen.json")
 SEEN_HOURS=48
@@ -91,14 +93,14 @@ def _clean(items,forced=None,allow_missing_date=False):
         dt=_parse_published(published)
         if dt is None:
             if not allow_missing_date:continue
-            # Only Infera items with no timestamp may pass; Infera's live /api/news feed is treated as current.
             dt=datetime.now(timezone.utc);a["publishedAt"]=dt.isoformat()
         elif dt.date()!=today:continue
         key=_normal_title(title)
         if key in keys:continue
         keys.add(key);region=_region(title,a.get("description",""),forced);score=_score(title,a.get("description",""),region)
         if score<3:continue
-        a["relevance"]=min(100,max(0,50+score*5));a["region"]=region;out.append(a)
+        if not a.get("relevance"):a["relevance"]=min(100,max(0,50+score*5))
+        a["region"]=region;out.append(a)
     return sorted(out,key=lambda x:_parse_published(x.get("publishedAt")) or datetime.now(timezone.utc),reverse=True)
 
 def _gnews(api_key,queries,forced=None,max_per=8):
@@ -123,6 +125,68 @@ def _rss(queries,forced=None):
         except Exception:pass
     return _clean(items,forced)
 
+def _date_from_node(node):
+    if not node:return None
+    for attr in ("datetime","dateTime","content"):
+        v=node.get(attr)
+        if v and _parse_published(v):return v
+    text=node.get_text(" ",strip=True)
+    return text if _parse_published(text) else None
+
+def _extract_jsonld(soup):
+    found=[]
+    for tag in soup.find_all("script",type="application/ld+json"):
+        try:
+            data=json.loads(tag.string or tag.get_text())
+        except Exception:continue
+        stack=data if isinstance(data,list) else [data]
+        while stack:
+            x=stack.pop()
+            if isinstance(x,list):stack.extend(x);continue
+            if not isinstance(x,dict):continue
+            if "@graph" in x and isinstance(x["@graph"],list):stack.extend(x["@graph"])
+            if x.get("headline") and (x.get("url") or x.get("mainEntityOfPage")):
+                u=x.get("url") or x.get("mainEntityOfPage")
+                if isinstance(u,dict):u=u.get("@id") or u.get("url")
+                found.append({"title":str(x.get("headline")),"url":str(u or ""),"description":str(x.get("description") or ""),"publishedAt":str(x.get("datePublished") or x.get("dateModified") or ""),"source":str((x.get("publisher") or {}).get("name") if isinstance(x.get("publisher"),dict) else x.get("publisher") or "Infera"),"provider":"Infera Business Topic"})
+    return found
+
+def fetch_infera_business_topic(limit=20):
+    """Primary Infera source. Reads the live /topic/business page and only accepts articles whose exposed publication date is today."""
+    try:
+        r=requests.get(INFERA_BUSINESS_TOPIC,headers=UA,timeout=30)
+        if not r.ok:return [],{"provider":"Infera Business Topic","status":r.status_code,"error":f"HTTP {r.status_code}"}
+        soup=BeautifulSoup(r.text,"html.parser");items=_extract_jsonld(soup)
+        # Also inspect visible article cards. This covers Next.js-rendered topic pages that don't expose useful JSON-LD.
+        for link in soup.find_all("a",href=True):
+            href=urljoin(INFERA_BUSINESS_TOPIC,link.get("href"));title=link.get_text(" ",strip=True)
+            if not title or len(title)<18 or href.rstrip("/")==INFERA_BUSINESS_TOPIC.rstrip("/"):continue
+            if "/topic/" in href and "/topic/business" not in href:continue
+            container=link
+            for _ in range(4):
+                container=container.parent if container and container.parent else container
+                if not container:break
+                txt=container.get_text(" ",strip=True)
+                if len(txt)>len(title)+10:break
+            pub=None;source="Infera"
+            if container:
+                t=container.find("time")
+                pub=_date_from_node(t)
+                if not pub:
+                    for m in container.find_all("meta"):
+                        pub=pub or _date_from_node(m)
+                src=container.find(attrs={"data-source":True})
+                if src:source=str(src.get("data-source") or source)
+            items.append({"title":title,"description":"","url":href,"source":source,"publishedAt":pub or "","provider":"Infera Business Topic"})
+        # De-duplicate raw page extraction before applying the strict date filter.
+        unique=[];seen_urls=set()
+        for x in items:
+            u=x.get("url","").split("#")[0]
+            if u and u not in seen_urls:seen_urls.add(u);unique.append(x)
+        clean=_clean(unique,allow_missing_date=False)
+        return clean[:limit],{"provider":"Infera Business Topic","status":200,"count":len(clean),"error":None}
+    except Exception as e:return [],{"provider":"Infera Business Topic","status":None,"error":str(e)}
+
 def _infera_story(a):
     if not isinstance(a,dict):return None
     title=str(a.get("title") or "").strip();url=str(a.get("url") or a.get("externalUrl") or a.get("external_url") or "").strip()
@@ -136,19 +200,25 @@ def _infera_story(a):
     return {"title":title,"description":str(a.get("summary") or a.get("description") or ""),"url":url,"source":str(src or "Infera"),"publishedAt":str(a.get("publishedAt") or a.get("published_at") or ""),"provider":"Infera","relevance":rel,"region":a.get("region") or "Global"}
 
 def fetch_infera_global_news(limit=20):
+    # Retained as a secondary Infera compatibility path. The bot's primary path is /topic/business.
     base=(os.getenv("INFERA_URL") or INFERA_DEFAULT_URL).strip().rstrip("/")
     try:
         r=requests.get(f"{base}/api/news",headers=UA,timeout=30)
         if not r.ok:return [],{"provider":"Infera","status":r.status_code,"error":f"HTTP {r.status_code}"}
         body=r.json();raw=body.get("stories") if isinstance(body,dict) else body
         if not isinstance(raw,list):return [],{"provider":"Infera","status":200,"error":"Invalid response"}
-        items=_clean([x for x in (_infera_story(s) for s in raw) if x],allow_missing_date=True)
+        items=_clean([x for x in (_infera_story(s) for s in raw) if x],allow_missing_date=False)
         return items[:limit],{"provider":"Infera","status":200,"count":len(items),"error":None}
     except Exception as e:return [],{"provider":"Infera","status":None,"error":str(e)}
 
 def fetch_market_news(api_key="",limit=4):
+    # Primary source: Infera's own Business topic. Only stories with an explicit date of today pass.
+    items,_=fetch_infera_business_topic(max(limit,12))
+    if items:return dedupe_items(items,limit),"Infera Business Topic"
+    # Secondary source: Infera API, still strict on publication date.
     items,_=fetch_infera_global_news(max(limit,12))
     if items:return dedupe_items(items,limit),"Infera"
+    # Last-resort external feeds, also today-only.
     items=_gnews(api_key,GLOBAL_QUERIES) or _rss(GLOBAL_QUERIES)
     return dedupe_items(items,limit),"GNews/RSS"
 
@@ -161,8 +231,7 @@ def _render(title,items,limit):
     lines=[title]
     for a in items[:limit]:
         h=html.escape(a.get("title",""));src=html.escape(a.get("source","Unknown"));region=html.escape(a.get("region","Global"));url=html.escape(a.get("url",""),quote=True)
-        rel=int(a.get("relevance",0) or 0)
-        level="High relevance" if rel>=80 else ("Medium relevance" if rel>=60 else "Relevant")
+        rel=int(a.get("relevance",0) or 0);level="High relevance" if rel>=80 else ("Medium relevance" if rel>=60 else "Relevant")
         lines.append(f'• <a href="{url}">{h}</a>\n  <i>{region} • {src} • {level}</i>')
     if len(lines)==1:lines.append("ℹ️ No new relevant business stories found.")
     return "\n".join(lines)
