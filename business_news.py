@@ -1,7 +1,7 @@
-import html, hashlib, json, os, re, time
+import html, hashlib, json, os, re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import quote
 import requests
 import xml.etree.ElementTree as ET
 
@@ -101,7 +101,10 @@ def _infera_story(a):
     title=str(a.get("title") or "").strip();url=str(a.get("url") or a.get("externalUrl") or a.get("external_url") or "").strip()
     if not title or not url:return None
     src=a.get("source");src=src.get("name") if isinstance(src,dict) else src
-    rel=a.get("marketRelevanceScore",a.get("market_relevance_score",a.get("marketRelevance",a.get("market_relevance",a.get("importanceScore",a.get("importance_score",a.get("trendScore",a.get("trend_score",0)))))))
+    rel=0
+    for key in ("marketRelevanceScore","market_relevance_score","marketRelevance","market_relevance","importanceScore","importance_score","trendScore","trend_score"):
+        if a.get(key) is not None:
+            rel=a.get(key);break
     try:rel=max(0,min(100,round(float(rel))))
     except Exception:rel=0
     return {"title":title,"description":str(a.get("summary") or a.get("description") or ""),"url":url,"source":str(src or "Infera"),"publishedAt":str(a.get("publishedAt") or a.get("published_at") or ""),"provider":"Infera","relevance":rel,"region":a.get("region") or "Global"}
