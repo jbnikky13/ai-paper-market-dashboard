@@ -9,7 +9,7 @@ on:
     - cron: "17 * * * *"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ai-market-telegram
@@ -19,48 +19,34 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      INVESTO_API_KEY: ${{ secrets.INVESTO_API_KEY }}
       NGXPULSE_API_KEY: ${{ secrets.NGXPULSE_API_KEY }}
       COINGECKO_DEMO_API_KEY: ${{ secrets.COINGECKO_DEMO_API_KEY }}
       GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }}
-
+      INFERA_URL: https://infera-ten.vercel.app
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-
-      - name: Install OCR system packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr poppler-utils
-
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -c "from bs4 import BeautifulSoup; print('BeautifulSoup dependency OK')"
-
-      - name: Restore news state
-        uses: actions/cache/restore@v4
-        with:
-          path: news_seen.json
-          key: news-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            news-state-${{ github.ref_name }}-
-
       - name: Send market and news update
         run: python telegram_bot.py
-
-      - name: Save news state
+      - name: Persist news state
         if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: news_seen.json
-          key: news-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f news_seen.json ]; then
+            git add news_seen.json
+            git diff --cached --quiet || git commit -m "chore: update Telegram news state"
+            git push
+          fi
