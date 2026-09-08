@@ -4,21 +4,20 @@ from pathlib import Path
 import pandas as pd
 import requests
 import streamlit as st
-from business_news import fetch_africa_business_news
+from business_news import fetch_africa_business_news, fetch_market_news
+from infera_news import fetch_infera_news
 
 st.set_page_config(page_title="AI Market Intelligence v5.0", page_icon="📊", layout="wide")
-VERSION = "v5.0"
+VERSION = "v5.1"
 DASHBOARD_URL = "https://ai-paper-market-dashboard.streamlit.app/"
 DATA_DIR = Path(os.getenv("MARKET_DATA_DIR", ".market_data")); DATA_DIR.mkdir(exist_ok=True)
 PAPER_FILE = DATA_DIR / "market_history.csv"
 CG = "https://api.coingecko.com/api/v3"
 YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart"
 NGX = "https://www.ngxpulse.ng"
-
 CRYPTO = {"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB","ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
 US_ASSETS = {"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft","GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
 NGX_ASSETS = {"DANGCEM":"Dangote Cement","GTCO":"GTCO","ZENITHBANK":"Zenith Bank","ACCESSCORP":"Access Holdings","UBA":"UBA","FIRSTHOLDCO":"First HoldCo","MTNN":"MTN Nigeria","AIRTELAFRI":"Airtel Africa","BUAFOODS":"BUA Foods","BUACEMENT":"BUA Cement","SEPLAT":"Seplat Energy","ARADEL":"Aradel Holdings","PRESCO":"Presco","NB":"Nigerian Breweries","FLOURMILL":"Flour Mills"}
-# Yahoo's NGX suffix is .LG for many Nigerian listings and is used only as a fallback.
 NGX_YAHOO = {s: f"{s}.LG" for s in NGX_ASSETS}
 SIX_ASSETS = {"3308.HK":"ZhongJi InnoLight","042700.KS":"Hanmi Semiconductor","009150.KS":"Samsung Electro-Mechanics","066570.KS":"LG Electronics","035420.KS":"NAVER","069500.KS":"KODEX 200 ETF"}
 
@@ -32,6 +31,7 @@ def secret(name):
 NGX_KEY = secret("NGXPULSE_API_KEY")
 CG_KEY = secret("COINGECKO_DEMO_API_KEY")
 GNEWS_KEY = secret("GNEWS_API_KEY")
+INFERA_URL = secret("INFERA_URL") or "https://infera-ten.vercel.app"
 
 def get(url, params=None, headers=None, timeout=15):
     try:
@@ -85,16 +85,13 @@ def ngx_primary():
 
 def build_ngx():
     primary, diag = ngx_primary()
-    if primary:
-        return primary, {**diag,"mode":"LIVE"}
+    if primary: return primary, {**diag,"mode":"LIVE"}
     out={}; fallback_ok=0
     for symbol, yahoo_symbol in NGX_YAHOO.items():
         x, _ = yahoo(yahoo_symbol)
         if x and x.get("price") is not None:
-            out[symbol]={"name":NGX_ASSETS[symbol],"price":x["price"],"change":x.get("change"),"status":"FALLBACK"}
-            fallback_ok += 1
-    if out:
-        return out, {**diag,"mode":"FALLBACK","fallback_count":fallback_ok,"fallback_note":"NGX Pulse unavailable; Yahoo Finance fallback used."}
+            out[symbol]={"name":NGX_ASSETS[symbol],"price":x["price"],"change":x.get("change"),"status":"FALLBACK"}; fallback_ok += 1
+    if out: return out, {**diag,"mode":"FALLBACK","fallback_count":fallback_ok,"fallback_note":"NGX Pulse unavailable; Yahoo Finance fallback used."}
     return {}, {**diag,"mode":"UNAVAILABLE","fallback_count":0}
 
 def outlook(change, closes=None):
@@ -108,10 +105,8 @@ def outlook(change, closes=None):
     else: label="NEUTRAL"; reasons.append("limited daily directional move")
     if closes and len(closes)>=10:
         sma5=sum(closes[-5:])/5; sma10=sum(closes[-10:])/10
-        if closes[-1] > sma5 > sma10:
-            score += 12; reasons.append("price above rising short-term averages")
-        elif closes[-1] < sma5 < sma10:
-            score -= 12; reasons.append("price below falling short-term averages")
+        if closes[-1] > sma5 > sma10: score += 12; reasons.append("price above rising short-term averages")
+        elif closes[-1] < sma5 < sma10: score -= 12; reasons.append("price below falling short-term averages")
         elif closes[-1] > sma10: score += 4; reasons.append("price above 10-day average")
     return label, max(50,min(95,round(score))), "; ".join(reasons)
 
@@ -149,14 +144,20 @@ def save_history(df):
     except Exception: pass
 
 st.title("📊 AI Market Intelligence")
-st.caption(f"{VERSION} • market outlook, ranked opportunities, Africa business intelligence • {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+st.caption(f"{VERSION} • market outlook, ranked opportunities, Infera global intelligence • {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
 if st.button("🔄 Refresh market data & news"):
     st.cache_data.clear(); st.rerun()
 
 df, diagnostics=collect(); save_history(df)
-news, news_provider = fetch_africa_business_news(GNEWS_KEY, limit=15)
+infera_news, infera_diag = fetch_infera_news(limit=15, base_url=INFERA_URL)
+if infera_news:
+    news = infera_news
+    news_provider = "Infera"
+    news_diag = infera_diag
+else:
+    news, news_provider = fetch_market_news(GNEWS_KEY, limit=15)
+    news_diag = {**infera_diag, "fallback": True, "fallback_provider": news_provider, "fallback_count": len(news)}
 
-# This is a research-ranking layer, NOT a trade/setup engine.
 st.subheader("🏆 Ranked Market Opportunities")
 st.caption("Ranking is for research attention only. It does not provide entries, stop-losses, take-profits, or trade instructions.")
 rank=df[df.status.isin(["LIVE","FALLBACK"])].copy()
@@ -169,32 +170,47 @@ for i,(_,r) in enumerate(rank.iterrows(),1):
     st.caption(r.reason)
 
 st.divider()
-tabs=st.tabs(["📈 All Markets","₿ Crypto","🇺🇸 US / ETFs","🇳🇬 NGX","🌏 Asia / Six","🌍 Africa Business News","🧪 Diagnostics","📝 History"])
+tabs=st.tabs(["📈 All Markets","₿ Crypto","🇺🇸 US / ETFs","🇳🇬 NGX","🌏 Asia / Six","🌍 Global Market & Business News","🌍 Africa Business News","🧪 Diagnostics","📝 History"])
 with tabs[0]:
     v=df.copy(); v["price"]=v.apply(lambda r:fmt(r.price,r.currency),axis=1); v["change_pct"]=v.change_pct.map(lambda x:"N/A" if pd.isna(x) else f"{x:+.2f}%")
     st.dataframe(v[["asset","name","market","source","price","change_pct","outlook","confidence","status"]],use_container_width=True,hide_index=True)
 with tabs[1]: st.dataframe(df[df.market=="Crypto"],use_container_width=True,hide_index=True)
 with tabs[2]: st.dataframe(df[df.market=="US / ETFs"],use_container_width=True,hide_index=True)
 with tabs[3]:
-    diag=next((d for n,d in diagnostics if n=="NGX"),{})
-    mode=diag.get("mode")
+    diag=next((d for n,d in diagnostics if n=="NGX"),{}); mode=diag.get("mode")
     if mode=="LIVE": st.success(f"NGX LIVE — {diag.get('count',0)} records from NGX Pulse.")
     elif mode=="FALLBACK": st.warning(f"NGX FALLBACK — NGX Pulse unavailable; {diag.get('fallback_count',0)} symbols loaded from Yahoo Finance.")
     else: st.error(f"NGX UNAVAILABLE — {diag.get('error','Unknown error')}")
     st.dataframe(df[df.market=="NGX"],use_container_width=True,hide_index=True)
 with tabs[4]: st.dataframe(df[df.market=="Asia / Six"],use_container_width=True,hide_index=True)
 with tabs[5]:
-    st.success(f"News provider: {news_provider} • Nigeria/Africa business focus • irrelevant general-interest stories filtered")
-    if not news: st.info("No relevant Africa business stories were returned.")
-    for a in news:
-        title=a.get("title",""); url=a.get("url",""); src=a.get("source","Unknown"); rel=a.get("relevance",0); region=a.get("region","Africa")
-        if url: st.markdown(f"**[{title}]({url})**")
-        else: st.markdown(f"**{title}**")
+    if news_provider=="Infera":
+        st.success(f"News provider: Infera • live AI-ranked global market & business intelligence • {news_diag.get('count',len(news))} stories available")
+    else:
+        st.warning(f"Infera temporarily unavailable — using {news_provider} fallback. {news_diag.get('error') or ''}")
+    if not news: st.info("No relevant global market/business stories were returned.")
+    for i,a in enumerate(news,1):
+        title=str(a.get("title","")).strip(); url=str(a.get("url","")).strip(); src=a.get("source","Unknown"); rel=a.get("relevance",0); region=a.get("region","Global")
+        st.markdown(f"### {i}. {title}")
         st.caption(f"{region} • {src} • relevance {rel}%")
+        if url:
+            st.link_button("🔗 Read original report", url, use_container_width=False)
+        summary=str(a.get("summary") or "").strip()
+        if summary: st.write(summary[:500])
+        st.divider()
 with tabs[6]:
-    for name,d in diagnostics:
-        st.write(f"**{name}** — HTTP {d.get('status','N/A')} • {d.get('error') or 'OK'}")
+    africa_news, africa_provider = fetch_africa_business_news(GNEWS_KEY, limit=10)
+    st.success(f"Africa business provider: {africa_provider}")
+    if not africa_news: st.info("No relevant Africa business stories were returned.")
+    for a in africa_news:
+        title=a.get("title",""); url=a.get("url",""); src=a.get("source","Unknown"); rel=a.get("relevance",0); region=a.get("region","Africa")
+        st.markdown(f"### {title}")
+        if url: st.link_button("🔗 Read original report", url)
+        st.caption(f"{region} • {src} • relevance {rel}%")
 with tabs[7]:
+    for name,d in diagnostics: st.write(f"**{name}** — HTTP {d.get('status','N/A')} • {d.get('error') or 'OK'}")
+    st.write(f"**Infera** — HTTP {news_diag.get('status','N/A')} • {news_diag.get('error') or ('OK' if news_provider=='Infera' else 'Fallback active')}")
+with tabs[8]:
     if PAPER_FILE.exists():
         try: st.dataframe(pd.read_csv(PAPER_FILE).tail(500),use_container_width=True,hide_index=True)
         except Exception as e: st.error(str(e))
