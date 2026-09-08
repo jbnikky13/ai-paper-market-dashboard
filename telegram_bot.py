@@ -8,7 +8,7 @@ CHANNEL=os.getenv("TELEGRAM_CHANNEL_ID","").strip()
 KOBO_KEY=(os.getenv("KOBO_API_KEY","").strip() or os.getenv("NGXPULSE_API_KEY","").strip())
 CG_KEY=os.getenv("COINGECKO_DEMO_API_KEY","").strip()
 GNEWS_KEY=os.getenv("GNEWS_API_KEY","").strip()
-VERSION="v6.2.0"
+VERSION="v6.2.1"
 CG="https://api.coingecko.com/api/v3"; YAHOO="https://query1.finance.yahoo.com/v8/finance/chart"; KOBO="https://koboterminal.com/api"
 CRYPTO={"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB","ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
 US={"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft","GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
@@ -46,20 +46,6 @@ def yahoo(symbol):
 def kobo_request(path,timeout=20):
     if not KOBO_KEY:return None,"NO_KEY"
     return req(f"{KOBO}{path}",headers={"X-API-Key":KOBO_KEY,"Content-Type":"application/json","User-Agent":f"AI-Market-Intelligence/{VERSION}"},timeout=timeout)
-
-def kobo_status():
-    r,e=kobo_request("/ngxdata/market-status",10)
-    if not r:return {"status":"unknown","error":e}
-    try:
-        body=r.json();return {"status":str(body.get("status") or "unknown").lower(),"message":body.get("message"),"timestamp":body.get("timestamp"),"error":None}
-    except Exception as e:return {"status":"unknown","error":str(e)}
-
-def kobo_market():
-    r,e=kobo_request("/ngxdata/market",15)
-    if not r:return None,e
-    try:
-        body=r.json();return body if isinstance(body,dict) else None,e
-    except Exception as e:return None,str(e)
 
 def kobo_ngx():
     """Primary NGX provider. Current Kobo Terminal API only; no legacy ngxpulse.ng endpoint."""
@@ -102,8 +88,6 @@ def market_lines():
         x,_=yahoo(s)
         if x:stocks.append((s,n,x["price"],x.get("change"),x.get("currency","USD"),"Yahoo Finance","US / ETFs"))
     ngxdata,mode,source=ngx()
-    status=kobo_status() if KOBO_KEY else {"status":"unknown","error":"NO_KEY"}
-    market,_=kobo_market() if KOBO_KEY else (None,None)
     for s,n in NGX_ASSETS.items():
         x=ngxdata.get(s)
         if x:stocks.append((s,n,x["price"],x.get("change"),"NGN",x.get("source",source),"NGX"))
@@ -113,12 +97,7 @@ def market_lines():
     lines += ["","<b>📈 STOCK & ETF PRICES</b>"]
     for s,n,p,ch,cur,src,mkt in stocks:
         chs="N/A" if ch is None else f"{ch:+.2f}%";icon="🟢" if (ch or 0)>0 else ("🔴" if (ch or 0)<0 else "🟡");lines.append(f"{icon} <b>{html.escape(n)}</b> ({s}) — {money(p,cur)} ({chs}) • {mkt} • {src}")
-    lines += ["",f"🇳🇬 <b>NGX DATA: {mode}</b>",f"<i>Kobo market status: {html.escape(status.get('status','unknown'))}</i>"]
-    if market:
-        try:
-            asi=market.get("asi");pct=market.get("pct_change");adv=market.get("advancers");dec=market.get("decliners")
-            if asi is not None:lines.append(f"<i>ASI: {asi:,.2f} ({pct:+.2f}%) • Advancers: {adv if adv is not None else 'N/A'} • Decliners: {dec if dec is not None else 'N/A'}</i>")
-        except Exception:pass
+    lines += ["",f"🇳🇬 <b>NGX DATA: {mode}</b>"]
     if mode=="NO_KEY":lines.append("<i>Kobo Terminal API key is not configured; Yahoo Finance fallback used where available.</i>")
     elif mode in ("UNAVAILABLE","ERROR","EMPTY"):lines.append("<i>Kobo Terminal data unavailable; Yahoo Finance fallback used where available. No prices are fabricated.</i>")
     return lines
