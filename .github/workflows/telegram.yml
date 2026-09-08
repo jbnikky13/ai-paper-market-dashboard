@@ -2,6 +2,13 @@ name: AI Market Telegram Updates
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "telegram_bot.py"
+      - "business_news.py"
+      - "requirements.txt"
+      - ".github/workflows/telegram.yml"
   schedule:
     - cron: "17 * * * *"
 
@@ -20,6 +27,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
       INVESTO_API_KEY: ${{ secrets.INVESTO_API_KEY }}
+      KOBO_API_KEY: ${{ secrets.KOBO_API_KEY }}
       NGXPULSE_API_KEY: ${{ secrets.NGXPULSE_API_KEY }}
       COINGECKO_DEMO_API_KEY: ${{ secrets.COINGECKO_DEMO_API_KEY }}
       GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }}
