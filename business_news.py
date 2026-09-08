@@ -64,8 +64,7 @@ def _region(title,description="",forced=None):
 
 def _parse_published(value):
     if not value:return None
-    raw=str(value).strip()
-    candidates=[raw]
+    raw=str(value).strip();candidates=[raw]
     if raw.endswith("Z"):candidates.append(raw[:-1]+"+00:00")
     for candidate in candidates:
         try:
@@ -78,25 +77,29 @@ def _parse_published(value):
         dt=parsedate_to_datetime(raw)
         if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
-    except (TypeError,ValueError):
-        return None
+    except (TypeError,ValueError):return None
 
 def _is_today(value):
     dt=_parse_published(value)
     return dt is not None and dt.date()==datetime.now(timezone.utc).date()
 
-def _clean(items,forced=None):
-    out=[];keys=set()
+def _clean(items,forced=None,allow_missing_date=False):
+    out=[];keys=set();today=datetime.now(timezone.utc).date()
     for a in items:
         title=str(a.get("title") or "").strip();url=str(a.get("url") or "").strip();published=str(a.get("publishedAt") or "").strip()
         if not title or not url or not url.startswith(("http://","https://")):continue
-        if not _is_today(published):continue
+        dt=_parse_published(published)
+        if dt is None:
+            if not allow_missing_date:continue
+            # Only Infera items with no timestamp may pass; Infera's live /api/news feed is treated as current.
+            dt=datetime.now(timezone.utc);a["publishedAt"]=dt.isoformat()
+        elif dt.date()!=today:continue
         key=_normal_title(title)
         if key in keys:continue
         keys.add(key);region=_region(title,a.get("description",""),forced);score=_score(title,a.get("description",""),region)
         if score<3:continue
         a["relevance"]=min(100,max(0,50+score*5));a["region"]=region;out.append(a)
-    return sorted(out,key=lambda x:_parse_published(x.get("publishedAt")) or datetime.min.replace(tzinfo=timezone.utc),reverse=True)
+    return sorted(out,key=lambda x:_parse_published(x.get("publishedAt")) or datetime.now(timezone.utc),reverse=True)
 
 def _gnews(api_key,queries,forced=None,max_per=8):
     if not api_key:return []
@@ -139,7 +142,7 @@ def fetch_infera_global_news(limit=20):
         if not r.ok:return [],{"provider":"Infera","status":r.status_code,"error":f"HTTP {r.status_code}"}
         body=r.json();raw=body.get("stories") if isinstance(body,dict) else body
         if not isinstance(raw,list):return [],{"provider":"Infera","status":200,"error":"Invalid response"}
-        items=_clean([x for x in (_infera_story(s) for s in raw) if x])
+        items=_clean([x for x in (_infera_story(s) for s in raw) if x],allow_missing_date=True)
         return items[:limit],{"provider":"Infera","status":200,"count":len(items),"error":None}
     except Exception as e:return [],{"provider":"Infera","status":None,"error":str(e)}
 
@@ -158,7 +161,9 @@ def _render(title,items,limit):
     lines=[title]
     for a in items[:limit]:
         h=html.escape(a.get("title",""));src=html.escape(a.get("source","Unknown"));region=html.escape(a.get("region","Global"));url=html.escape(a.get("url",""),quote=True)
-        lines.append(f'• <a href="{url}">{h}</a>\n  <i>{region} • {src} • relevance {a.get("relevance",0)}%</i>')
+        rel=int(a.get("relevance",0) or 0)
+        level="High relevance" if rel>=80 else ("Medium relevance" if rel>=60 else "Relevant")
+        lines.append(f'• <a href="{url}">{h}</a>\n  <i>{region} • {src} • {level}</i>')
     if len(lines)==1:lines.append("ℹ️ No new relevant business stories found.")
     return "\n".join(lines)
 
