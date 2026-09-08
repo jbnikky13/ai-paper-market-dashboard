@@ -1,17 +1,17 @@
 import html, hashlib, json, os, re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote
 import requests
-from bs4 import BeautifulSoup
 
 INFERA_DEFAULT_URL = "https://infera-ten.vercel.app"
 INFERA_BUSINESS_TOPIC = f"{INFERA_DEFAULT_URL}/topic/business"
-UA = {"User-Agent": "Mozilla/5.0 (compatible; AI-Market-Intelligence/6.2)"}
+INFERA_BUSINESS_API = f"{INFERA_DEFAULT_URL}/api/topic/business"
+UA = {"User-Agent": "AI-Market-Intelligence/6.2"}
 STATE_FILE = Path("news_seen.json")
 SEEN_HOURS = 48
 
-POSITIVE_TERMS = {"earnings":4,"profit":4,"revenue":3,"results":3,"acquisition":4,"merger":4,"investment":3,"funding":3,"listing":5,"shares":3,"stock":3,"dividend":4,"debt":3,"bond":3,"interest rate":3,"inflation":3,"oil":3,"gas":3,"crude":3,"refinery":4,"lng":4,"power":3,"electricity":3,"telecom":3,"bank":2,"fintech":3,"manufacturing":3,"trade":2,"exports":3,"imports":2,"regulation":3,"policy":2,"startup":2,"technology":2,"expansion":3,"contract":3,"tariff":3,"central bank":4,"fed":4,"ecb":4,"boe":3}
+POSITIVE_TERMS = {"earnings":4,"profit":4,"revenue":3,"results":3,"acquisition":4,"merger":4,"investment":3,"funding":3,"listing":5,"shares":3,"stock":3,"dividend":4,"debt":3,"bond":3,"interest rate":3,"inflation":3,"oil":3,"gas":3,"crude":3,"refinery":4,"lng":4,"power":3,"electricity":3,"telecom":3,"bank":2,"fintech":3,"manufacturing":3,"trade":2,"exports":3,"imports":3,"regulation":3,"policy":2,"startup":2,"technology":2,"expansion":3,"contract":3,"tariff":3,"central bank":4,"fed":4,"ecb":4,"boe":3}
 NOISE_TERMS = {"football":-7,"soccer":-7,"celebrity":-7,"movie":-7,"music":-7,"actor":-7,"actress":-7,"reality show":-7,"gaming":-6,"videogame":-6,"crime drama":-6,"weather":-5,"sports":-6}
 
 def _normal_title(value):
@@ -58,79 +58,66 @@ def _region(title,description=""):
     if any(x in text for x in ("africa","african","ghana","kenya","south africa","egypt","morocco")):return "Africa"
     return "Global"
 
-def _jsonld_articles(soup):
-    found=[]
-    for tag in soup.find_all("script",type="application/ld+json"):
-        try:data=json.loads(tag.string or tag.get_text())
-        except Exception:continue
-        stack=list(data) if isinstance(data,list) else [data]
-        while stack:
-            obj=stack.pop()
-            if isinstance(obj,list):stack.extend(obj);continue
-            if not isinstance(obj,dict):continue
-            if isinstance(obj.get("@graph"),list):stack.extend(obj["@graph"])
-            title=obj.get("headline") or obj.get("name");url=obj.get("url") or obj.get("mainEntityOfPage")
-            if isinstance(url,dict):url=url.get("@id") or url.get("url")
-            if title and isinstance(url,str):
-                found.append({"title":str(title).strip(),"url":urljoin(INFERA_BUSINESS_TOPIC,url),"description":str(obj.get("description") or "").strip(),"publishedAt":str(obj.get("datePublished") or obj.get("dateModified") or ""),"source":"Infera"})
-    return found
-
-def _next_data_articles(soup):
-    found=[];tag=soup.find("script",id="__NEXT_DATA__")
-    if not tag:return found
-    try:data=json.loads(tag.string or tag.get_text())
-    except Exception:return found
-    def walk(obj):
-        if isinstance(obj,dict):
-            title=obj.get("title") or obj.get("headline");url=obj.get("url") or obj.get("href") or obj.get("link") or obj.get("externalUrl")
-            if isinstance(title,str) and isinstance(url,str) and len(title.strip())>=18 and (url.startswith("/") or url.startswith("http")):
-                found.append({"title":title.strip(),"url":urljoin(INFERA_BUSINESS_TOPIC,url),"description":str(obj.get("description") or obj.get("summary") or "").strip(),"publishedAt":str(obj.get("publishedAt") or obj.get("published_at") or obj.get("datePublished") or obj.get("date") or ""),"source":str(obj.get("source") or "Infera")})
-            for value in obj.values():walk(value)
-        elif isinstance(obj,list):
-            for value in obj:walk(value)
-    walk(data);return found
-
-def _visible_link_articles(soup):
-    found=[]
-    for link in soup.find_all("a",href=True):
-        href=urljoin(INFERA_BUSINESS_TOPIC,link.get("href"));title=re.sub(r"\s+"," ",link.get_text(" ",strip=True))
-        if len(title)<18 or not href.startswith(("http://","https://")) or "/topic/business" in href.rstrip("/"):continue
-        container=link
-        for _ in range(5):
-            if not getattr(container,"parent",None):break
-            container=container.parent
-            if len(container.get_text(" ",strip=True))>len(title)+10:break
-        published="";description=""
-        if container:
-            time_tag=container.find("time")
-            if time_tag:published=time_tag.get("datetime") or time_tag.get_text(" ",strip=True)
-            meta=container.find("meta",attrs={"property":re.compile("published|modified",re.I)})
-            if meta:published=published or meta.get("content","")
-            description=container.get_text(" ",strip=True)[:500]
-        found.append({"title":title,"url":href,"description":description,"publishedAt":published,"source":"Infera"})
-    return found
+def _normalise_topic_story(story):
+    if not isinstance(story,dict):return None
+    title=str(story.get("title") or "").strip()
+    if not title:return None
+    # Infera's topic page links to /story/{id}; use the canonical story URL when an id exists.
+    sid=story.get("id")
+    url=str(story.get("url") or "").strip()
+    if sid is not None and str(sid).strip():
+        url=f"{INFERA_DEFAULT_URL}/story/{quote(str(sid),safe='')}"
+    elif url and not url.startswith(("http://","https://")):
+        url=f"{INFERA_DEFAULT_URL}/{url.lstrip('/')}"
+    if not url:return None
+    description=str(story.get("description") or story.get("summary") or "").strip()
+    relevance=story.get("marketRelevance",story.get("market_relevance_score",story.get("marketRelevanceScore",0)))
+    try:relevance=max(0,min(100,round(float(relevance))))
+    except (TypeError,ValueError):relevance=0
+    if not relevance:
+        relevance=min(100,max(0,50+_score(title,description)*5))
+    return {
+        "title":title,
+        "url":url,
+        "description":description,
+        "publishedAt":str(story.get("publishedAt") or story.get("published_at") or ""),
+        "source":str(story.get("sourceName") or story.get("source") or "Infera"),
+        "region":_region(title,description),
+        "relevance":relevance,
+        "momentum":story.get("momentumScore",story.get("momentum_score",0)),
+        "importance":story.get("importanceScore",story.get("importance_score",0)),
+    }
 
 def fetch_infera_business_topic(limit=20):
-    """Single source of truth for bot business news: Infera /topic/business. No date gate."""
+    """Single source of truth: the same /api/topic/business data rendered by Infera /topic/business."""
     try:
-        r=requests.get(INFERA_BUSINESS_TOPIC,headers=UA,timeout=30)
-        if not r.ok:return [],{"provider":"Infera Business Topic","status":r.status_code,"error":f"HTTP {r.status_code}"}
-        soup=BeautifulSoup(r.text,"html.parser")
-        raw=_jsonld_articles(soup)+_next_data_articles(soup)+_visible_link_articles(soup)
-        unique=[];seen=set()
-        for item in raw:
-            url=str(item.get("url") or "").split("#")[0];title=str(item.get("title") or "").strip()
-            if not title or not url or url in seen:continue
-            seen.add(url)
-            score=_score(title,item.get("description",""))
-            item["region"]=_region(title,item.get("description",""));item["relevance"]=min(100,max(0,50+score*5));unique.append(item)
-        return unique[:limit],{"provider":"Infera Business Topic","status":200,"count":len(unique),"error":None}
-    except Exception as e:return [],{"provider":"Infera Business Topic","status":None,"count":0,"error":str(e)}
+        # The public topic page is client-rendered and fetches its stories from this route.
+        # Scraping the HTML would only retrieve the loading shell, which caused the empty feed.
+        r=requests.get(INFERA_BUSINESS_API,headers={**UA,"Accept":"application/json"},timeout=30)
+        if not r.ok:
+            return [],{"provider":"Infera Business Topic","status":r.status_code,"error":f"HTTP {r.status_code}","endpoint":INFERA_BUSINESS_API}
+        body=r.json()
+        topic=body.get("topic") if isinstance(body,dict) else None
+        raw=topic.get("stories") if isinstance(topic,dict) else []
+        if not isinstance(raw,list):raw=[]
+        items=[];seen=set()
+        for story in raw:
+            item=_normalise_topic_story(story)
+            if not item:continue
+            fp=story_fingerprint(item)
+            if fp in seen:continue
+            seen.add(fp);items.append(item)
+        # Preserve Infera's ordering from the topic page: it is already ordered by published_at desc.
+        return items[:limit],{"provider":"Infera Business Topic","status":200,"count":len(items),"error":None,"endpoint":INFERA_BUSINESS_API}
+    except ValueError as e:
+        return [],{"provider":"Infera Business Topic","status":200,"count":0,"error":f"Invalid JSON: {e}","endpoint":INFERA_BUSINESS_API}
+    except Exception as e:
+        return [],{"provider":"Infera Business Topic","status":None,"count":0,"error":str(e),"endpoint":INFERA_BUSINESS_API}
 
 def fetch_market_news(api_key="",limit=4):
-    """Global bot news comes exclusively from Infera's Business topic page."""
-    items,_=fetch_infera_business_topic(max(limit,12))
-    return dedupe_items(items,limit),"Infera Business Topic"
+    """Global bot news comes exclusively from Infera's Business topic data."""
+    items,meta=fetch_infera_business_topic(max(limit,12))
+    return dedupe_items(items,limit),"Infera Business Topic" if not meta.get("error") else "Infera Business Topic (error)"
 
 def fetch_africa_business_news(api_key="",limit=4):
     return [],"Disabled"
