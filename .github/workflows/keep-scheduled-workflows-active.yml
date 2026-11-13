@@ -1,0 +1,60 @@
+name: Keep scheduled workflows active
+
+on:
+  schedule:
+    - cron: "37 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: keep-scheduled-workflows-active
+  cancel-in-progress: false
+
+jobs:
+  keep-active:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Re-enable scheduled workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for workflow in "telegram.yml" "keep-scheduled-workflows-active.yml"; do
+            echo "Ensuring ${workflow} is enabled..."
+            gh api --method PUT "repos/${REPOSITORY}/actions/workflows/${workflow}/enable"
+          done
+
+      - name: Create repository activity heartbeat when due
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          marker=".github/workflow-heartbeat"
+          now="$(date -u +%s)"
+          last=0
+
+          if git log -1 --format=%ct -- "$marker" | grep -q .; then
+            last="$(git log -1 --format=%ct -- "$marker")"
+          fi
+
+          age_days=$(( (now - last) / 86400 ))
+          echo "Heartbeat age: ${age_days} day(s)"
+
+          if [ "$last" -eq 0 ] || [ "$age_days" -ge 45 ]; then
+            date -u +"Heartbeat: %Y-%m-%dT%H:%M:%SZ" > "$marker"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "$marker"
+            git commit -m "chore: scheduled workflow activity heartbeat"
+            git push
+          else
+            echo "Heartbeat not due; no commit created."
+          fi
