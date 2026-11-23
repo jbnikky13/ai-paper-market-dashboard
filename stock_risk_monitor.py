@@ -86,7 +86,7 @@ def _get_history(symbol):
         return None, str(exc)
 
 
-def _news_for_watchlist(limit=80):
+def _news_for_watchlist(limit=250):
     return fetch_market_news(limit=limit)
 
 
