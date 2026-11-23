@@ -6,6 +6,22 @@ import stock_risk_monitor
 
 
 class StockRiskReportCaptureTests(unittest.TestCase):
+    def test_company_news_matching_excludes_generic_macro_context(self):
+        macro = {
+            "title": "Nigeria inflation and central bank interest rate outlook",
+            "description": "Naira exchange rate and inflation update",
+        }
+        for item in stock_risk_monitor.WATCHLIST:
+            self.assertFalse(stock_risk_monitor._matches_news(macro, item))
+        self.assertTrue(stock_risk_monitor._is_market_context(macro))
+
+    def test_issuer_headlines_match_only_the_named_company(self):
+        tip_story = {"title": "The Initiates Plc announces audited results", "description": ""}
+        tip = next(x for x in stock_risk_monitor.WATCHLIST if x["symbol"] == "TIP")
+        gtco = next(x for x in stock_risk_monitor.WATCHLIST if x["symbol"] == "GTCO")
+        self.assertTrue(stock_risk_monitor._matches_news(tip_story, tip))
+        self.assertFalse(stock_risk_monitor._matches_news(tip_story, gtco))
+
     def test_build_report_captures_telegram_html_without_sending(self):
         now = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
         story = {
