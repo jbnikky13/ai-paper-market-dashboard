@@ -33,9 +33,13 @@ def send_telegram(messages, max_attempts=5):
                 continue
 
             if response.ok:
-                # Telegram applies per-chat/per-bot message rate limits. Keep a
-                # small gap between alerts so a large IPO discovery batch does
-                # not trigger a 429.
+                try:
+                    accepted = response.json().get("ok") is True
+                except ValueError:
+                    accepted = False
+                if not accepted:
+                    return False, f"Telegram did not acknowledge message {index + 1}."
+                # Telegram applies per-chat/per-bot message rate limits.
                 if index < len(messages) - 1:
                     time.sleep(1.2)
                 break
