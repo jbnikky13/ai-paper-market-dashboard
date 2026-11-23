@@ -13,7 +13,19 @@ class StockRiskReportCaptureTests(unittest.TestCase):
         }
         for item in stock_risk_monitor.WATCHLIST:
             self.assertFalse(stock_risk_monitor._matches_news(macro, item))
-        self.assertTrue(stock_risk_monitor._is_market_context(macro))
+        self.assertFalse(stock_risk_monitor._is_market_context(macro))
+
+    def test_market_context_requires_a_real_market_signal(self):
+        ngx_selloff = {
+            "title": "NGX sell-off wipes out N767 billion as banking stocks retreat",
+            "description": "Nigerian equities fall as investors reassess market exposure",
+        }
+        unrelated_policy = {
+            "title": "Government raises funding for police-college rehabilitation",
+            "description": "The federal government announced a new funding package",
+        }
+        self.assertTrue(stock_risk_monitor._is_market_context(ngx_selloff))
+        self.assertFalse(stock_risk_monitor._is_market_context(unrelated_policy))
 
     def test_issuer_headlines_match_only_the_named_company(self):
         tip_story = {"title": "The Initiates Plc announces audited results", "description": ""}
@@ -21,6 +33,11 @@ class StockRiskReportCaptureTests(unittest.TestCase):
         gtco = next(x for x in stock_risk_monitor.WATCHLIST if x["symbol"] == "GTCO")
         self.assertTrue(stock_risk_monitor._matches_news(tip_story, tip))
         self.assertFalse(stock_risk_monitor._matches_news(tip_story, gtco))
+        mtn_group_story = {"title": "MTN Group expands its African footprint", "description": ""}
+        mtn = next(x for x in stock_risk_monitor.WATCHLIST if x["symbol"] == "MTNN")
+        self.assertFalse(stock_risk_monitor._matches_news(mtn_group_story, mtn))
+        mtn_nigeria_story = {"title": "MTN Nigeria announces network investment", "description": ""}
+        self.assertTrue(stock_risk_monitor._matches_news(mtn_nigeria_story, mtn))
 
     def test_large_upward_move_is_separate_from_downside_risk(self):
         item = {"daily": 31.65, "weekly": 5.84, "news": []}
