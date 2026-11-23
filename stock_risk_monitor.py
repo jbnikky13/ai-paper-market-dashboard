@@ -24,10 +24,10 @@ WATCHLIST = [
 ]
 ALIASES = {
     "NVDA": ("nvidia", "nvda", "jensen huang", "ai chip"),
-    "MTNN": ("mtn nigeria", "mtn group", "mt n nigeria", "mt n"),
+    "MTNN": ("mtn nigeria", "mtn group", "mt n nigeria", "mt n", "mtnn"),
     "TIP": ("the initiates", "tip plc", "initiates plc"),
     "GTCO": ("gtco", "guaranty trust", "gtbank", "guaranty trust holding"),
-    "DANGCEM": ("dangote cement", "dangote group", "dangote"),
+    "DANGCEM": ("dangote cement", "dangote cement plc", "dangcem"),
 }
 MACRO_TERMS = (
     "central bank", "cbn", "interest rate", "inflation", "naira", "foreign exchange",
