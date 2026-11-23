@@ -1,6 +1,6 @@
-# AI Market Intelligence v5.0
+# AI Market Intelligence — Telegram Reporting
 
-Complete market dashboard + independent Telegram market reporter + quarterly financial intelligence.
+Telegram is the project's sole reporting and alert-delivery channel. The Streamlit app is a separate optional research interface; it is not part of the reporting pipeline.
 
 ## Architecture
 
@@ -10,12 +10,17 @@ Therefore the Telegram worker can continue operating even if the Streamlit dashb
 
 ### Files
 
-- `app.py` — Streamlit market dashboard
+- `telegram_bot.py` — primary hourly Telegram market/news reporter
+- `business_news.py` — Infera Business Topic integration and Telegram news formatting
+- `ng_ipo_bot.py` / `ng_ipo_scanner.py` — Nigeria IPO/public-offer Telegram alerts
+- `quarterly_financial_bot.py` / `financials.py` — quarterly financial Telegram alerts
+- `app.py` — optional Streamlit research interface (not a reporting channel)
 - `pages/2_Quarterly_Financials.py` — interactive quarter-by-quarter financial analysis
 - `financials.py` — public-data financial/filing intelligence engine
 - `telegram_bot.py` — independent market/news Telegram worker
 - `quarterly_financial_bot.py` — automatic Telegram quarterly filing reporter
-- `.github/workflows/telegram.yml` — scheduled market/news + new-quarter financial updates
+- `.github/workflows/telegram.yml` — scheduled hourly market/news Telegram report
+- `.github/workflows/telegram-research-reports.yml` — scheduled IPO and quarterly financial Telegram reports
 - `requirements.txt` — dependencies
 - `.gitignore` — protects local secrets/data
 
@@ -94,9 +99,9 @@ python quarterly_financial_bot.py
 
 ## Cloud operation
 
-GitHub Actions runs the Telegram worker automatically every hour. The quarterly financial worker checks for a newly reported quarter and sends a Telegram digest only when a new filing/quarter is detected, so it does not repeatedly spam the channel with the same quarter.
+GitHub Actions sends the main market/news report to Telegram every hour. A separate Telegram-only workflow checks for Nigeria IPO/public-offer documents daily and quarterly financial filings weekly. The reporting workers write delivery state only after Telegram acknowledges successful delivery, so failed sends remain eligible for retry.
 
-The Streamlit dashboard and Telegram worker remain independent.
+Telegram is the only reporting channel. The optional Streamlit interface is not used to deliver alerts or reports.
 
 ## Data sources
 
