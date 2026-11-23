@@ -116,7 +116,7 @@ def _risk(item, stories):
         return "HIGH"
     if (daily is not None and daily <= -3) or (weekly is not None and weekly <= -5):
         return "MODERATE"
-    if daily is None and weekly is None and not related:
+    if daily is None and weekly is None:
         return "UNKNOWN"
     return "LOW"
 
