@@ -72,17 +72,24 @@ def _items_from_feed(xml_text, provider, category, now):
         link = (node.findtext("link") or "").strip()
         description = (node.findtext("description") or "").strip()
         published = _parse_date(node.findtext("pubDate"))
+        source_node = node.find("source")
+        source_name = (source_node.text or "").strip() if source_node is not None else ""
+        source_url = source_node.attrib.get("url", "") if source_node is not None else ""
         if not title or not link:
             continue
         if published and (published > now + timedelta(hours=2) or published < now - timedelta(days=MAX_AGE_DAYS)):
             continue
         # Google News links carry the publisher in the title; preserve that
         # attribution and the Google News URL if no canonical URL is exposed.
-        publisher = provider
+        publisher = source_name or provider
         if category == "official":
-            if not _is_official(link):
+            if not source_url or not _is_official(source_url):
                 continue
-            publisher = _host(link)
+            publisher = _host(source_url)
+        elif category == "independent":
+            if source_url and "reuters.com" not in _host(source_url):
+                continue
+            publisher = "Reuters"
         items.append({
             "title": title,
             "url": link,
