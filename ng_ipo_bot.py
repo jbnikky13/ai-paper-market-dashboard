@@ -1,7 +1,7 @@
 import os
 import time
 import requests
-from ng_ipo_scanner import scan, telegram_text
+from ng_ipo_scanner import scan, telegram_text, commit_delivered
 
 
 def send_telegram(messages, max_attempts=5):
@@ -68,6 +68,7 @@ def main():
     ok, msg = send_telegram([telegram_text(x) for x in fresh])
     if not ok:
         raise SystemExit(msg)
+    commit_delivered(fresh)
     print(f"Sent {len(fresh)} Nigeria capital-market alert(s).")
 
 
