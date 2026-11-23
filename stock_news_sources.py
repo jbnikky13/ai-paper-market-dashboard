@@ -87,7 +87,7 @@ def _items_from_feed(xml_text, provider, category, now):
                 continue
             publisher = _host(source_url)
         elif category == "independent":
-            if source_url and "reuters.com" not in _host(source_url):
+            if not source_url or "reuters.com" not in _host(source_url):
                 continue
             publisher = "Reuters"
         items.append({
