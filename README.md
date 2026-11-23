@@ -12,6 +12,8 @@ Therefore the Telegram worker can continue operating even if the Streamlit dashb
 
 - `telegram_bot.py` — primary hourly Telegram market/news reporter
 - `stock_risk_monitor.py` — daily downside-risk monitoring for NVDA, MTNN, TIP, GTCO and DANGCEM
+- `stock_news_sources.py` — independent and official RSS news collection for the daily risk monitor
+- `tests/test_stock_news_sources.py` — news-source parsing, freshness and publisher-attribution tests
 - `business_news.py` — Infera Business Topic integration and Telegram news formatting
 - `ng_ipo_bot.py` / `ng_ipo_scanner.py` — Nigeria IPO/public-offer Telegram alerts
 - `quarterly_financial_bot.py` / `financials.py` — quarterly financial Telegram alerts
@@ -135,8 +137,8 @@ A separate scheduled worker sends a daily research-only warning report to the ex
 - GTCO
 - Dangote Cement (DANGCEM)
 
-The report includes the latest available daily-bar quote and its timestamp, close-to-close daily and five-session price changes where Yahoo Finance history is available, relevant company and broad macro headlines from the Infera Business Topic feed, and a conservative low/moderate/high review flag. It flags daily declines of 3% or more and five-session declines of 5% or more; these are review thresholds, not automatic sell signals.
+The report includes the latest available daily-bar quote and its timestamp, close-to-close daily and five-session price changes where Yahoo Finance history is available, relevant company and broad macro headlines from Nairametrics, Reuters discovery and official issuer/exchange sources, and a conservative low/moderate/high review flag. It flags daily declines of 3% or more and five-session declines of 5% or more; these are review thresholds, not automatic sell signals.
 
 The workflow runs daily at 22:30 UTC (23:30 WAT) so the normal NGX and US cash sessions have generally closed. It can also be run manually from GitHub Actions. It reuses the existing `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` repository secrets; no additional Telegram bot or channel is required.
 
-**Limitations:** this is a once-daily report, not continuous real-time surveillance, and cannot guarantee advance notice of sudden market movements. Quotes can be delayed or unavailable; each quote timestamp is shown and missing data is not fabricated. News coverage depends on the Infera Business Topic feed. Valuation scoring is intentionally omitted until a consistent valuation data source is configured. The report is research information, not investment advice or a prediction of exact price bottoms.
+**Limitations:** this is a once-daily report, not continuous real-time surveillance, and cannot guarantee advance notice of sudden market movements. Quotes can be delayed or unavailable; each quote timestamp is shown and missing data is not fabricated. News coverage uses Nairametrics publisher RSS, Reuters headlines discovered through Google News RSS, and domain-filtered official issuer/NGX/SEC Nigeria discovery. Reuters does not maintain a working public RSS feed. Official discovery is dependent on search indexing and is not a complete filing feed. Provider-level status and empty/error states are shown in each report. Valuation scoring is intentionally omitted until a consistent valuation data source is configured. The report is research information, not investment advice or a prediction of exact price bottoms.
