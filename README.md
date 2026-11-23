@@ -11,6 +11,7 @@ Therefore the Telegram worker can continue operating even if the Streamlit dashb
 ### Files
 
 - `telegram_bot.py` — primary hourly Telegram market/news reporter
+- `stock_risk_monitor.py` — daily downside-risk monitoring for NVDA, MTNN, TIP, GTCO and DANGCEM
 - `business_news.py` — Infera Business Topic integration and Telegram news formatting
 - `ng_ipo_bot.py` / `ng_ipo_scanner.py` — Nigeria IPO/public-offer Telegram alerts
 - `quarterly_financial_bot.py` / `financials.py` — quarterly financial Telegram alerts
@@ -21,6 +22,7 @@ Therefore the Telegram worker can continue operating even if the Streamlit dashb
 - `quarterly_financial_bot.py` — automatic Telegram quarterly filing reporter
 - `.github/workflows/telegram.yml` — scheduled hourly market/news Telegram report
 - `.github/workflows/telegram-research-reports.yml` — scheduled IPO and quarterly financial Telegram reports
+- `.github/workflows/stock-risk-monitor.yml` — daily stock downside-risk report to the same Telegram channel
 - `requirements.txt` — dependencies
 - `.gitignore` — protects local secrets/data
 
@@ -121,3 +123,20 @@ Local filesystem persistence depends on the hosting provider. For durable cloud 
 ## Scope
 
 This project is informational/paper analysis only. It does not execute trades or recommend a risk amount.
+
+
+## Daily stock downside-risk monitoring
+
+A separate scheduled worker sends a daily research-only warning report to the existing Telegram channel. It monitors:
+
+- NVIDIA (NVDA)
+- MTN Nigeria (MTNN)
+- The Initiates Plc (TIP)
+- GTCO
+- Dangote Cement (DANGCEM)
+
+The report includes the latest available daily-bar quote and its timestamp, close-to-close daily and five-session price changes where Yahoo Finance history is available, relevant company and broad macro headlines from the Infera Business Topic feed, and a conservative low/moderate/high review flag. It flags daily declines of 3% or more and five-session declines of 5% or more; these are review thresholds, not automatic sell signals.
+
+The workflow runs daily at 22:30 UTC (23:30 WAT) so the normal NGX and US cash sessions have generally closed. It can also be run manually from GitHub Actions. It reuses the existing `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` repository secrets; no additional Telegram bot or channel is required.
+
+**Limitations:** this is a once-daily report, not continuous real-time surveillance, and cannot guarantee advance notice of sudden market movements. Quotes can be delayed or unavailable; each quote timestamp is shown and missing data is not fabricated. News coverage depends on the Infera Business Topic feed. Valuation scoring is intentionally omitted until a consistent valuation data source is configured. The report is research information, not investment advice or a prediction of exact price bottoms.
