@@ -110,9 +110,9 @@ Telegram is the only reporting channel. The optional Streamlit interface is not 
 ## Data sources
 
 - CoinGecko — crypto
-- Yahoo Finance — listed market data and supported quarterly fundamentals
+- Yahoo Finance — US listed market data and supported quarterly fundamentals
+- Kobo Terminal (formerly NGX Pulse) — canonical NGX equity prices and daily market snapshots, when `KOBO_API_KEY` or `NGXPULSE_API_KEY` is configured
 - SEC — U.S. filings and Company Facts
-- NGX Pulse — NGX market prices, when configured
 
 ## Paper history
 
@@ -137,8 +137,8 @@ A separate scheduled worker sends a daily research-only warning report to the ex
 - GTCO
 - Dangote Cement (DANGCEM)
 
-The report includes the latest available daily-bar quote and its timestamp, close-to-close daily and five-session price changes where Yahoo Finance history is available, relevant company and broad macro headlines from Nairametrics, Reuters discovery and official issuer/exchange sources, and a conservative low/moderate/high review flag. It flags daily declines of 3% or more and five-session declines of 5% or more; these are review thresholds, not automatic sell signals.
+The report includes the latest available quote and its source timestamp: Yahoo Finance daily bars for US listings and Kobo Terminal NGX snapshots for Nigerian listings. It shows daily and five-session price changes where the source provides them, relevant company and broad macro headlines from Nairametrics, Reuters discovery and official issuer/exchange sources, and a conservative low/moderate/high review flag. It flags daily declines of 3% or more and five-session declines of 5% or more; these are review thresholds, not automatic sell signals.
 
 The workflow runs daily at 22:30 UTC (23:30 WAT) so the normal NGX and US cash sessions have generally closed. It can also be run manually from GitHub Actions. It reuses the existing `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` repository secrets; no additional Telegram bot or channel is required.
 
-**Limitations:** this is a once-daily report, not continuous real-time surveillance, and cannot guarantee advance notice of sudden market movements. Quotes can be delayed or unavailable; each quote timestamp is shown and missing data is not fabricated. News coverage uses Nairametrics publisher RSS, Reuters headlines discovered through Google News RSS, domain-filtered official issuer/NGX/SEC Nigeria discovery, and Infera as a supplemental feed. Reuters does not maintain a working public RSS feed. Official discovery is dependent on search indexing and is not a complete filing feed. Provider-level status and empty/error states are shown in each report. Valuation scoring is intentionally omitted until a consistent valuation data source is configured. The report is research information, not investment advice or a prediction of exact price bottoms.
+**Limitations:** this is a once-daily report, not continuous real-time surveillance, and cannot guarantee advance notice of sudden market movements. Quotes can be delayed or unavailable; each quote timestamp is shown and missing data is not fabricated. NGX symbols use the provider's canonical tickers (MTNN, TIP, GTCO and DANGCEM); expired Kobo snapshots are withheld rather than labelled current. News coverage uses Nairametrics publisher RSS, Reuters headlines discovered through Google News RSS, domain-filtered official issuer/NGX/SEC Nigeria discovery, and Infera as a supplemental feed. Reuters does not maintain a working public RSS feed. Official discovery is dependent on search indexing and is not a complete filing feed. Provider-level status and empty/error states are shown in each report. Valuation scoring is intentionally omitted until a consistent valuation data source is configured. The report is research information, not investment advice or a prediction of exact price bottoms.
