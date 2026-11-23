@@ -17,10 +17,10 @@ UA = {"User-Agent": "AI-Market-Intelligence-Risk-Monitor/1.0"}
 YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart"
 WATCHLIST = [
     {"symbol": "NVDA", "name": "NVIDIA", "market": "US", "yahoo": "NVDA"},
-    {"symbol": "MTNN", "name": "MTN Nigeria", "market": "NGX", "yahoo": "MTNN.LG"},
-    {"symbol": "TIP", "name": "The Initiates Plc", "market": "NGX", "yahoo": "TIP.LG"},
-    {"symbol": "GTCO", "name": "GTCO", "market": "NGX", "yahoo": "GTCO.LG"},
-    {"symbol": "DANGCEM", "name": "Dangote Cement", "market": "NGX", "yahoo": "DANGCEM.LG"},
+    {"symbol": "MTNN", "name": "MTN Nigeria", "market": "NGX", "yahoo": None},
+    {"symbol": "TIP", "name": "The Initiates Plc", "market": "NGX", "yahoo": None},
+    {"symbol": "GTCO", "name": "GTCO", "market": "NGX", "yahoo": None},
+    {"symbol": "DANGCEM", "name": "Dangote Cement", "market": "NGX", "yahoo": None},
 ]
 ALIASES = {
     "NVDA": ("nvidia", "nvda", "jensen huang", "ai chip"),
@@ -136,8 +136,8 @@ def _data_confidence(item, news_meta):
 def build_report(now=None):
     now = now or datetime.now(timezone.utc)
     stories, news_meta = _news_for_watchlist()
-    # Reuse the configured NGX provider if Yahoo has no usable .LG daily chart.
-    # Kobo may not expose historical bars or an exchange timestamp; keep those N/A.
+    # Kobo Terminal is the primary NGX source. Yahoo .LG symbols are not
+    # canonical NGX tickers and are intentionally not queried.
     kobo_data, kobo_status, kobo_source = kobo_ngx()
     lines = [
         "<b>🛡️ DAILY STOCK RISK WATCH</b>",
@@ -148,19 +148,29 @@ def build_report(now=None):
     ]
     results = []
     for item in WATCHLIST:
-        quote_data, error = _get_history(item["yahoo"])
-        if not quote_data and item["market"] == "NGX":
+        if item["market"] == "NGX":
             fallback = kobo_data.get(item["symbol"])
-            if fallback and fallback.get("price") is not None:
-                quote_data = {
+            if fallback and fallback.get("price") is not None and not fallback.get("stale"):
+                quote_data, error = {
                     "price": float(fallback["price"]),
                     "currency": "NGN",
                     "daily": fallback.get("change"),
-                    "weekly": None,
-                    "timestamp": now,
-                    "timestamp_label": f"retrieved {now.strftime('%Y-%m-%d %H:%M UTC')}; provider quote timestamp unavailable",
-                    "source": kobo_source,
-                }
+                    "weekly": fallback.get("weekly"),
+                    "timestamp": fallback.get("timestamp") or now,
+                    "timestamp_label": fallback.get("timestamp_label") or "provider timestamp unavailable",
+                    "source": fallback.get("source", kobo_source),
+                }, None
+            else:
+                quote_data, error = None, (
+                    "Kobo Terminal API key is not configured" if kobo_status == "NO_KEY"
+                    else "Kobo Terminal returned no matching quote"
+                    if kobo_status == "EMPTY"
+                    else "Kobo Terminal quote snapshot is stale"
+                    if kobo_status == "STALE"
+                    else "Kobo Terminal request failed"
+                )
+        else:
+            quote_data, error = _get_history(item["yahoo"])
         if quote_data:
             quote_data["news"] = [s for s in stories if _matches_news(s, item)][:4]
             quote_data["risk"] = _risk(quote_data, stories)
@@ -208,7 +218,7 @@ def build_report(now=None):
         "• Thresholds trigger review, not an automatic sell signal.",
         "",
         "<b>DATA LIMITATIONS</b>",
-        "• Quotes are daily-bar data and may be delayed or stale; each timestamp is shown separately.",
+        "• NGX quotes use Kobo Terminal daily market snapshots; US quotes use Yahoo Finance daily bars. Each source timestamp is shown separately.",
         "• News: Nairametrics publisher RSS; Reuters headlines via Google News RSS; official issuer, NGX and SEC Nigeria domain-filtered discovery; Infera retained as a supplemental feed.",
         "• Reuters has no working public RSS feed; Google News is the discovery transport, not the publisher.",
         "• Official discovery depends on indexing and is not a complete filing feed.",
