@@ -8,7 +8,7 @@ class StockNewsSourceTests(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
 
-        def test_official_domain_allowlist_rejects_unrelated_hosts(self):
+    def test_official_domain_allowlist_rejects_unrelated_hosts(self):
         self.assertTrue(_is_official("https://doclib.ngxgroup.com/investors"))
         self.assertTrue(_is_official("https://investor.nvidia.com/news"))
         self.assertFalse(_is_official("https://example.com/ngxgroup.com"))
