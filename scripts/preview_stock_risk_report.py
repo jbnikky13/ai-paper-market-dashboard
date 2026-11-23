@@ -3,6 +3,15 @@
 This script never calls telegram_bot.send and requires no Telegram credentials.
 """
 from datetime import datetime, timezone
+from pathlib import Path
+import sys
+
+# When executed as `python scripts/preview_stock_risk_report.py`, Python puts
+# scripts/ (not the repository root) on sys.path. Add the root so the project
+# modules can be imported consistently in CI and local runs.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import stock_risk_monitor
 from stock_news_sources import fetch_market_news
