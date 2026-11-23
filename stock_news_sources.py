@@ -54,6 +54,25 @@ def _parse_date(value):
         return None
 
 
+def _normalise_story_timestamp(story):
+    """Normalize publisher RSS and Infera API timestamps to aware UTC datetimes."""
+    value = story.get("published_at")
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    value = story.get("publishedAt") or story.get("published_at")
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        return _parse_date(value)
+
+
 def _host(url):
     from urllib.parse import urlparse
     return (urlparse(url).hostname or "").lower().removeprefix("www.")
@@ -141,6 +160,7 @@ def fetch_market_news(now=None, limit=80):
             item["category"] = "infera"
             item["provider"] = "Infera Business Topic"
             item["source_verified"] = False
+            item["published_at"] = _normalise_story_timestamp(item)
             all_items.append(item)
         statuses.append({
             "provider": "Infera Business Topic",
@@ -179,7 +199,7 @@ def fetch_market_news(now=None, limit=80):
 
     # Prefer direct publisher / official items over discovery duplicates.
     priority = {"official": 0, "publisher": 1, "independent": 2, "infera": 3}
-    all_items.sort(key=lambda x: (priority.get(x["category"], 9), -(x["published_at"].timestamp() if x["published_at"] else 0)))
+    all_items.sort(key=lambda x: (priority.get(x["category"], 9), -(_normalise_story_timestamp(x).timestamp() if _normalise_story_timestamp(x) else 0)))
     seen = set()
     unique = []
     for item in all_items:
