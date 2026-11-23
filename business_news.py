@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import quote
 import requests
 
-INFERA_DEFAULT_URL = "https://infera-ten.vercel.app"
+INFERA_DEFAULT_URL = os.getenv("INFERA_URL", "https://infera-ten.vercel.app").strip().rstrip("/") or "https://infera-ten.vercel.app"
 INFERA_BUSINESS_TOPIC = f"{INFERA_DEFAULT_URL}/topic/business"
 INFERA_BUSINESS_API = f"{INFERA_DEFAULT_URL}/api/topic/business"
 UA = {"User-Agent": "AI-Market-Intelligence/6.2"}
