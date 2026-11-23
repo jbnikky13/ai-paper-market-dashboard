@@ -45,7 +45,6 @@ def dedupe_items(items,limit=None):
         if story_fingerprint(item) in seen or any(_similar(item,x) for x in out):continue
         out.append(item)
         if limit and len(out)>=limit:break
-    if out:save_seen(out)
     return out
 
 def _score(title,description=""):
