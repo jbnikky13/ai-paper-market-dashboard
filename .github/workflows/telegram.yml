@@ -53,7 +53,7 @@ jobs:
       - name: Send market and news update
         run: python telegram_bot.py
       - name: Save news state
-        if: always()
+        if: success()
         uses: actions/cache/save@v4
         with:
           path: news_seen.json

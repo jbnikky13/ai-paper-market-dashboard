@@ -1,0 +1,71 @@
+name: AI Market Telegram Research Reports
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 6 * * *"
+    - cron: "41 7 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-market-telegram-research
+  cancel-in-progress: false
+
+jobs:
+  nigeria-ipo-alerts:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 6 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: Restore IPO scan state
+        uses: actions/cache/restore@v4
+        with:
+          path: ng_ipo_seen.json
+          key: ipo-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ipo-state-${{ github.ref_name }}-
+      - name: Send Nigeria IPO alerts to Telegram
+        run: python ng_ipo_bot.py
+      - name: Save IPO scan state after successful delivery
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: ng_ipo_seen.json
+          key: ipo-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+  quarterly-financials:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 7 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: Restore quarterly filing state
+        uses: actions/cache/restore@v4
+        with:
+          path: financial_seen.json
+          key: financial-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: financial-state-${{ github.ref_name }}-
+      - name: Send quarterly financial updates to Telegram
+        run: python quarterly_financial_bot.py
+      - name: Save quarterly filing state after successful delivery
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: financial_seen.json
+          key: financial-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}

@@ -1,7 +1,7 @@
 import os, html, time
 from datetime import datetime, timezone
 import requests
-from business_news import fetch_market_news, render_global_telegram
+from business_news import fetch_market_news, render_global_telegram, save_seen
 
 TOKEN=os.getenv("TELEGRAM_BOT_TOKEN","").strip()
 CHANNEL=os.getenv("TELEGRAM_CHANNEL_ID","").strip()
@@ -111,18 +111,39 @@ def split_html(text,limit=3500):
     if cur:parts.append(cur)
     return parts
 
-def send(messages):
+def send(messages, attempts=4):
     if not TOKEN:return False,"TELEGRAM_BOT_TOKEN is missing."
     if not CHANNEL:return False,"TELEGRAM_CHANNEL_ID is missing."
+    url=f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     for i,msg in enumerate(messages,1):
-        try:
-            r=requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",json={"chat_id":CHANNEL,"text":msg,"parse_mode":"HTML","disable_web_page_preview":False},timeout=20)
-            if not r.ok:return False,f"Message {i}/{len(messages)} failed: HTTP {r.status_code}: {r.text[:500]}"
-        except Exception as e:return False,f"Message {i}/{len(messages)} failed: {e}"
+        for attempt in range(attempts):
+            try:
+                r=requests.post(url,json={"chat_id":CHANNEL,"text":msg,"parse_mode":"HTML","disable_web_page_preview":False},timeout=30)
+                payload=r.json() if r.content else {}
+                if r.ok and payload.get("ok") is True:
+                    break
+                if r.status_code==429:
+                    delay=payload.get("parameters",{}).get("retry_after",10)
+                    time.sleep(max(1,int(delay))+1)
+                    continue
+                if r.status_code>=500 and attempt+1<attempts:
+                    time.sleep(min(2**attempt,15))
+                    continue
+                return False,f"Message {i}/{len(messages)} rejected: HTTP {r.status_code}: {str(payload)[:400]}"
+            except (requests.RequestException,ValueError) as e:
+                if attempt+1>=attempts:
+                    return False,f"Message {i}/{len(messages)} failed after retries: {e}"
+                time.sleep(min(2**attempt,15))
+        else:
+            return False,f"Message {i}/{len(messages)} failed after {attempts} attempts."
+        time.sleep(1.2)
     return True,f"Telegram sent successfully in {len(messages)} message(s)."
+
 
 if __name__=="__main__":
     market=market_lines();global_news,_=fetch_market_news(GNEWS_KEY,8);messages=[]
     for section in ["\n".join(market),render_global_telegram(global_news,8)]:messages.extend(split_html(section))
     ok,result=send(messages);print(result)
     if not ok:raise SystemExit(1)
+    # Only suppress these stories after every Telegram message was accepted.
+    save_seen(global_news)

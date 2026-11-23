@@ -28,44 +28,45 @@ def save_state(x):
 def scan():
     state = load_state()
     fresh = []
+    pending = set()
     for page in SOURCE_PAGES:
         for item in discover_links(page):
             key = f"{item.get('url','')}|{item.get('title','')}"
-            if state.get(key):
+            if state.get(key) or key in pending:
                 continue
             intelligence = analyze(item["url"])
+            # Failed downloads are not marked seen; they can be retried.
+            if not intelligence:
+                continue
             item["checked_at"] = datetime.now(timezone.utc).isoformat()
-            if intelligence:
-                item.update(intelligence)
-            state[key] = item["checked_at"]
+            item.update(intelligence)
+            pending.add(key)
             fresh.append(item)
-    save_state(state)
     return fresh
 
 
+def commit_delivered(items):
+    state = load_state()
+    for item in items:
+        key = f"{item.get('url','')}|{item.get('title','')}"
+        state[key] = item.get("checked_at") or datetime.now(timezone.utc).isoformat()
+    save_state(state)
+
+
 def telegram_text(x):
-    fields = ("audited_profit", "operating_cash_flow", "debt", "refining_margins", "crude_supply_terms", "expansion_costs", "use_of_proceeds")
+    fields = ("audited_profit", "operating_cash_flow", "debt", "refining_margins",
+              "crude_supply_terms", "expansion_costs", "use_of_proceeds")
     lines = [
         "<b>🚨 🇳🇬 IPO / PUBLIC-OFFER ALERT</b>",
         f"<b>{html.escape(x.get('title','Capital-market document'))}</b>",
         f"Stage: <b>{html.escape(str(x.get('stage','OFFICIAL-SOURCE SIGNAL')))}</b>",
         "Status: <b>OFFICIAL-SOURCE DOCUMENT — VERIFY APPROVAL</b>",
+        "<b>Financial figures:</b> Automated number extraction is not verified and is intentionally withheld. Check the original audited statements and offer document.",
     ]
-    for k in fields:
-        label = k.replace('_', ' ').title()
-        lines.append(f"<b>{label}:</b> {html.escape(str(x.get(k) or 'N/A'))}")
-    for label, key in (("Audited profit", "audited_profit_value"), ("Operating cash flow", "operating_cash_flow_value"), ("Debt", "debt_value"), ("IPO proceeds", "ipo_proceeds_value"), ("Offer price", "offer_price_value"), ("Implied offer value", "implied_offer_value")):
-        if x.get(key) is not None:
-            lines.append(f"<b>{label}:</b> {x[key]:,.2f}")
-    if x.get('cash_conversion') is not None:
-        lines.append(f"<b>Cash conversion:</b> {x['cash_conversion']:.2f}x")
-    if x.get('debt_to_profit') is not None:
-        lines.append(f"<b>Debt / profit:</b> {x['debt_to_profit']:.2f}x")
-    if x.get('pe') is not None:
-        lines.append(f"<b>P/E:</b> {x['pe']:.2f}x")
+    for key in fields:
+        label = key.replace("_", " ").title()
+        lines.append(f"<b>{label}:</b> {html.escape(str(x.get(key) or 'N/A'))}")
     lines += [
-        f"<b>IPO Quality Score:</b> {x.get('ipo_quality_score','N/A')}/100",
-        f"<b>Disclosure coverage:</b> {x.get('disclosure_coverage','N/A')}%",
         f"<b>Verification:</b> {html.escape(str(x.get('verification','N/A')))}",
         f"<b>Source:</b> {html.escape(x.get('source_url',x.get('url','')))}",
     ]

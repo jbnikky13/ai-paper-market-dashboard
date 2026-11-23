@@ -116,9 +116,24 @@ def _quarterly_sec_metrics(facts):
             if not end:
                 continue
             fp = row.get("fp") or ""
-            # Prefer explicit quarterly facts; annual facts are retained only
-            # when the period is FY so the UI can show the audit status.
-            if fp in ("Q1", "Q2", "Q3", "FY"):
+            # SEC income/cash-flow facts in Q2/Q3 10-Q filings are often
+            # year-to-date cumulative values. Until we can safely reconcile
+            # comparative YTD facts, accept only duration facts spanning a
+            # single quarter. Instant balance-sheet facts (debt/cash) have no
+            # start date and remain eligible.
+            flow_metrics = {"net_profit", "revenue", "operating_cash_flow", "capex"}
+            if label in flow_metrics:
+                start = row.get("start")
+                if not start:
+                    continue
+                try:
+                    from datetime import date
+                    days = (date.fromisoformat(end) - date.fromisoformat(start)).days
+                except (TypeError, ValueError):
+                    continue
+                if not 45 <= days <= 120:
+                    continue
+            if fp in ("Q1", "Q2", "Q3"):
                 metrics.setdefault(end, {})[label] = row.get("val")
                 metrics[end]["form"] = row.get("form")
                 metrics[end]["fp"] = fp

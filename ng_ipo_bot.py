@@ -1,7 +1,7 @@
 import os
 import time
 import requests
-from ng_ipo_scanner import scan, telegram_text
+from ng_ipo_scanner import scan, telegram_text, commit_delivered
 
 
 def send_telegram(messages, max_attempts=5):
@@ -33,9 +33,13 @@ def send_telegram(messages, max_attempts=5):
                 continue
 
             if response.ok:
-                # Telegram applies per-chat/per-bot message rate limits. Keep a
-                # small gap between alerts so a large IPO discovery batch does
-                # not trigger a 429.
+                try:
+                    accepted = response.json().get("ok") is True
+                except ValueError:
+                    accepted = False
+                if not accepted:
+                    return False, f"Telegram did not acknowledge message {index + 1}."
+                # Telegram applies per-chat/per-bot message rate limits.
                 if index < len(messages) - 1:
                     time.sleep(1.2)
                 break
@@ -68,6 +72,7 @@ def main():
     ok, msg = send_telegram([telegram_text(x) for x in fresh])
     if not ok:
         raise SystemExit(msg)
+    commit_delivered(fresh)
     print(f"Sent {len(fresh)} Nigeria capital-market alert(s).")
 
 
