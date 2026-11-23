@@ -27,6 +27,18 @@ class StockNewsSourceTests(unittest.TestCase):
         self.assertEqual(items[0]["source"], "gtco-plc.com")
         self.assertTrue(items[0]["source_verified"])
 
+    def test_generic_index_placeholders_are_filtered(self):
+        xml = """<rss><channel>
+          <item><title>- NVIDIA Newsroom</title><link>https://news.google.com/one</link>
+            <source url="https://nvidianews.nvidia.com/">NVIDIA</source></item>
+          <item><title>Untitled - Dangote Industries</title><link>https://news.google.com/two</link>
+            <source url="https://dangote.com/">Dangote</source></item>
+          <item><title>Dangote Cement announces quarterly results</title><link>https://news.google.com/three</link>
+            <source url="https://dangote.com/">Dangote</source></item>
+        </channel></rss>"""
+        items = _items_from_feed(xml, "Official", "official", self.now)
+        self.assertEqual([item["title"] for item in items], ["Dangote Cement announces quarterly results"])
+
     def test_official_feed_rejects_non_allowlisted_publisher(self):
         xml = """<rss><channel><item>
           <title>False official claim</title><link>https://news.google.com/example</link>
