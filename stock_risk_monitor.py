@@ -254,19 +254,7 @@ def build_report(now=None):
         "• High-impact company headline: elevated review flag.",
         "• Unusual moves of either direction receive a separate event-review flag.",
         "• Thresholds trigger review, not an automatic sell signal.",
-        "• An unusual upward move is not, by itself, a downside-risk signal.",
-        "",
-        "<b>DATA LIMITATIONS</b>",
-        "• NGX quotes use Kobo Terminal daily market snapshots; US quotes use Yahoo Finance daily bars. Each source timestamp is shown separately.",
-        "• News: Nairametrics publisher RSS; Reuters headlines via Google News RSS; official issuer, NGX and SEC Nigeria domain-filtered discovery; Infera retained as a supplemental feed.",
-        "• Reuters has no working public RSS feed; Google News is the discovery transport, not the publisher.",
-        "• Official discovery depends on indexing and is not a complete filing feed.",
-        "• No matching headline does not prove no risk; provider errors and empty feeds are shown below.",
-        "• Valuation is not scored until a consistent, timestamped valuation feed is configured.",
-        f"<i>News: {html.escape(str(news_meta.get('provider', 'Unknown')))} • status: {html.escape(str(news_meta.get('status', 'unknown')))} • usable stories: {news_meta.get('count', 0)}</i>",
-        *[f"  • {html.escape(p.get('provider', 'provider'))}: {html.escape(p.get('status', 'unknown'))} ({p.get('count', 0)} stories)" for p in news_meta.get('providers', [])],
-        "",
-        "<i>Research and monitoring only. Not investment advice or a prediction of exact price bottoms.</i>",
+
     ]
     return lines, results
 
