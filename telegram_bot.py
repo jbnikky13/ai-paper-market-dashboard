@@ -89,7 +89,7 @@ def kobo_ngx():
             row_stamp=_kobo_datetime(trade_date) or as_of
             stamp_label=f"as of {as_of.strftime('%Y-%m-%d %H:%M UTC')}" if as_of else "provider timestamp unavailable"
             if trade_date:stamp_label+=f" • trade date {str(trade_date)[:10]}"
-            out[s]={"price":p,"change":ch,"weekly":weekly,"currency":"NGN","name":x.get("name") or NGX_ASSETS[s],"source":"Kobo Terminal NGX API","timestamp":row_stamp,"timestamp_label":stamp_label,"stale":stale}
+            out[s]={"price":p,"change":ch,"weekly":weekly,"weekly_label":"7-day","currency":"NGN","name":x.get("name") or NGX_ASSETS[s],"source":"Kobo Terminal NGX API","timestamp":row_stamp,"timestamp_label":stamp_label,"stale":stale}
         return out,("STALE" if stale and out else "LIVE" if out else "EMPTY"),"Kobo Terminal NGX API"
     except Exception as exc:
         return {},f"ERROR: {exc}","Kobo Terminal"
