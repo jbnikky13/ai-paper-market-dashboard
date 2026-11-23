@@ -73,7 +73,7 @@ class StockNewsSourceTests(unittest.TestCase):
         }
         import business_news
         with patch.object(business_news, "fetch_infera_business_topic",
-                          return_value=([infera_story], {"error": None, "count": 1})), \\
+                          return_value=([infera_story], {"error": None, "count": 1})), \
              patch("stock_news_sources._fetch_feed", return_value=[]):
             stories, meta = fetch_market_news(now=self.now)
 
