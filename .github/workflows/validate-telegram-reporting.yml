@@ -28,4 +28,7 @@ jobs:
       - name: Run stock news source and report-capture tests
         run: python -m unittest discover -s tests -v
       - name: Inspect live news feeds and print Telegram preview (no delivery)
+        env:
+          KOBO_API_KEY: ${{ secrets.KOBO_API_KEY }}
+          NGXPULSE_API_KEY: ${{ secrets.NGXPULSE_API_KEY }}
         run: python scripts/preview_stock_risk_report.py
