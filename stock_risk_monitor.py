@@ -91,12 +91,23 @@ def _news_for_watchlist(limit=250):
 
 
 def _matches_news(story, item):
+    """Match issuer-specific evidence only; broad macro news is reported separately."""
+    text = " ".join(f"{story.get('title', '')} {story.get('description', '')}".lower().split())
+    for alias in ALIASES[item["symbol"]]:
+        # Phrase aliases use literal matching; ticker-like aliases require token
+        # boundaries so short symbols such as TIP do not match ordinary words.
+        if len(alias) <= 5:
+            import re
+            if re.search(r"(?<![a-z0-9])" + re.escape(alias) + r"(?![a-z0-9])", text):
+                return True
+        elif alias in text:
+            return True
+    return False
+
+
+def _is_market_context(story):
     text = f"{story.get('title', '')} {story.get('description', '')}".lower()
-    aliases = ALIASES[item["symbol"]]
-    company_match = any(alias in text for alias in aliases)
-    macro_match = any(term in text for term in MACRO_TERMS)
-    # Global macro stories are relevant to all holdings, but remain labelled broad-market context.
-    return company_match or macro_match
+    return any(term in text for term in MACRO_TERMS)
 
 
 def _money(value, currency):
@@ -210,12 +221,22 @@ def build_report(now=None):
         elif quote_data.get("price") is not None:
             lines.append("  <i>No matching recent headline found in configured feeds; this is not proof that no risk exists.</i>")
         lines.append("")
+    context_stories = [s for s in stories if _is_market_context(s)][:3]
+    if context_stories:
+        lines += ["<b>MARKET CONTEXT — NOT COMPANY-SPECIFIC</b>"]
+        for story in context_stories:
+            title = html.escape(str(story.get("title", "Untitled"))[:220])
+            url = html.escape(str(story.get("url", "")), quote=True)
+            source = html.escape(str(story.get("source", story.get("provider", "Unknown"))))
+            lines.append(f'  • <a href="{url}">{title}</a> <i>({source} • broad context)</i>')
+        lines.append("")
+
     lines += [
         "<b>ALERT RULES</b>",
         "• Daily decline ≥3%: price-weakness flag.",
         "• Five-session decline ≥5%: weekly weakness flag.",
-        "• High-impact company headline: elevated review flag.",
-        "• Thresholds trigger review, not an automatic sell signal.",
+        "• High-impact company headline: elevated review flag.\n        • Unusual moves of either direction receive a separate event-review flag.",
+        "• Thresholds trigger review, not an automatic sell signal.\n        • An unusual upward move is not, by itself, a downside-risk signal.",
         "",
         "<b>DATA LIMITATIONS</b>",
         "• NGX quotes use Kobo Terminal daily market snapshots; US quotes use Yahoo Finance daily bars. Each source timestamp is shown separately.",
