@@ -1,7 +1,7 @@
 import os, html, time
 from datetime import datetime, timezone
 import requests
-from business_news import fetch_market_news, render_global_telegram
+from business_news import fetch_market_news, render_global_telegram, save_seen
 
 TOKEN=os.getenv("TELEGRAM_BOT_TOKEN","").strip()
 CHANNEL=os.getenv("TELEGRAM_CHANNEL_ID","").strip()
@@ -126,3 +126,5 @@ if __name__=="__main__":
     for section in ["\n".join(market),render_global_telegram(global_news,8)]:messages.extend(split_html(section))
     ok,result=send(messages);print(result)
     if not ok:raise SystemExit(1)
+    # Only suppress these stories after every Telegram message was accepted.
+    save_seen(global_news)
