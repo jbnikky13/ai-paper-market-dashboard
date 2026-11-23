@@ -80,7 +80,11 @@ class StockRiskReportCaptureTests(unittest.TestCase):
         self.assertIn("NVIDIA announces quarterly results", telegram_text)
         self.assertIn("Data confidence:", telegram_text)
         self.assertIn("Nairametrics", telegram_text)
-        self.assertIn("Not investment advice", telegram_text)
+        self.assertNotIn("An unusual upward move is not, by itself, a downside-risk signal", telegram_text)
+        self.assertNotIn("DATA LIMITATIONS", telegram_text)
+        self.assertNotIn("Reuters has no working public RSS feed", telegram_text)
+        self.assertNotIn("usable stories:", telegram_text)
+        self.assertNotIn("Not investment advice", telegram_text)
         self.assertEqual(len(results), len(stock_risk_monitor.WATCHLIST))
         send_mock.assert_not_called()
 
