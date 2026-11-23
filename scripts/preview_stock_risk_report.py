@@ -19,15 +19,24 @@ from stock_news_sources import fetch_market_news
 
 def main():
     now = datetime.now(timezone.utc)
-    stories, meta = fetch_market_news(now=now)
+    stories, meta = fetch_market_news(now=now, limit=250)
     print("=== LIVE NEWS PROVIDER RESULTS ===")
     print(f"Overall: {meta.get('status')} | stories: {meta.get('count')} | retrieved: {meta.get('retrieved_at')}")
     for provider in meta.get("providers", []):
         print(f"{provider.get('provider')} [{provider.get('category')}]: {provider.get('status')} ({provider.get('count', 0)} stories)")
         if provider.get("error"):
             print(f"  error: {provider['error']}")
-    for story in stories[:25]:
-        print(f"  - [{story.get('source')} / {story.get('category')}] {story.get('title')} | {story.get('publishedAt') or 'timestamp unavailable'}")
+    # Show provider-specific samples so high-priority categories cannot hide
+    # Reuters or Infera evidence in the preview.
+    for category in ("publisher", "independent", "official", "infera"):
+        provider_stories = [story for story in stories if story.get("category") == category]
+        print(f"\\n--- {category.upper()} SAMPLE ({len(provider_stories)} returned) ---")
+        for story in provider_stories[:5]:
+            print(
+                f"  - [{story.get('source')} | domain={story.get('publisher_domain', 'unknown')} "
+                f"| verified={story.get('source_verified', False)}] "
+                f"{story.get('title')} | {story.get('publishedAt') or 'timestamp unavailable'}"
+            )
 
     # Reuse the just-fetched stories; build_report formats but does not send.
     stock_risk_monitor._news_for_watchlist = lambda limit=80: (stories[:limit], meta)
