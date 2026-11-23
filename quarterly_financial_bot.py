@@ -67,7 +67,7 @@ def line(label, value):
 
 def render(row):
     q = row.get("quarter_end", "N/A")
-    return "\\n".join([
+    return "\n".join([
         f"<b>📑 {html.escape(row.get('company', ''))} ({html.escape(row.get('symbol', ''))})</b>",
         f"<i>Quarter ended {html.escape(q)}</i>",
         line("Reported profit", fmt_money(row.get("profit"))),
@@ -111,13 +111,13 @@ def main():
         return
 
     header = (
-        "<b>📊 AI MARKET INTELLIGENCE — NEW QUARTERLY FINANCIALS</b>\\n"
-        "<i>Figures are reported values; quarterly filings are normally unaudited.</i>\\n\\n"
+        "<b>📊 AI MARKET INTELLIGENCE — NEW QUARTERLY FINANCIALS</b>\n"
+        "<i>Figures are reported values; quarterly filings are normally unaudited.</i>\n\n"
     )
     batch = header
     messages = []
     for row in changed:
-        block = render(row) + "\\n\\n"
+        block = render(row) + "\n\n"
         if len(batch) + len(block) > 3600 and batch.strip():
             messages.append(batch.rstrip())
             batch = ""
