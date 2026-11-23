@@ -11,7 +11,7 @@ from urllib.parse import quote
 import requests
 
 from business_news import fetch_infera_business_topic
-from telegram_bot import send, split_html
+from telegram_bot import send, split_html, kobo_ngx
 
 UA = {"User-Agent": "AI-Market-Intelligence-Risk-Monitor/1.0"}
 YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart"
@@ -123,6 +123,9 @@ def _risk(item, stories):
 def build_report(now=None):
     now = now or datetime.now(timezone.utc)
     stories, news_meta = _news_for_watchlist()
+    # Reuse the configured NGX provider if Yahoo has no usable .LG daily chart.
+    # Kobo may not expose historical bars or an exchange timestamp; keep those N/A.
+    kobo_data, kobo_status, kobo_source = kobo_ngx()
     lines = [
         "<b>🛡️ DAILY STOCK RISK WATCH</b>",
         f"<i>Generated {now.strftime('%Y-%m-%d %H:%M UTC')}</i>",
@@ -133,7 +136,18 @@ def build_report(now=None):
     results = []
     for item in WATCHLIST:
         quote_data, error = _get_history(item["yahoo"])
-        # Do not silently substitute a stale or unrelated price feed.
+        if not quote_data and item["market"] == "NGX":
+            fallback = kobo_data.get(item["symbol"])
+            if fallback and fallback.get("price") is not None:
+                quote_data = {
+                    "price": float(fallback["price"]),
+                    "currency": "NGN",
+                    "daily": fallback.get("change"),
+                    "weekly": None,
+                    "timestamp": now,
+                    "timestamp_label": f"retrieved {now.strftime('%Y-%m-%d %H:%M UTC')}; provider quote timestamp unavailable",
+                    "source": kobo_source,
+                }
         if quote_data:
             quote_data["news"] = [s for s in stories if _matches_news(s, item)][:4]
             quote_data["risk"] = _risk(quote_data, stories)
@@ -149,7 +163,7 @@ def build_report(now=None):
             daily_text = "N/A" if daily is None else f"{daily:+.2f}%"
             weekly_text = "N/A" if weekly is None else f"{weekly:+.2f}%"
             icon = "🔴" if quote_data["risk"] == "HIGH" else "🟠" if quote_data["risk"] == "MODERATE" else "🟢"
-            stamp = quote_data["timestamp"].strftime("%Y-%m-%d %H:%M UTC")
+            stamp = quote_data.get("timestamp_label") or quote_data["timestamp"].strftime("%Y-%m-%d %H:%M UTC")
             lines.append(
                 f"{icon} <b>{html.escape(item['name'])} ({item['symbol']})</b> — "
                 f"{_money(quote_data['price'], quote_data['currency'])}"
