@@ -59,7 +59,7 @@ def kobo_ngx():
     """Fetch the documented all-stocks payload and preserve source freshness metadata."""
     if not KOBO_KEY:return {},"NO_KEY","Kobo Terminal"
     r,e=kobo_request("/ngxdata/stocks",20)
-    if not r:return {},"ERROR","Kobo Terminal"
+    if not r:return {},f"ERROR: {e or 'request failed'}","Kobo Terminal"
     try:
         body=r.json()
         if isinstance(body,list):
@@ -92,7 +92,7 @@ def kobo_ngx():
             out[s]={"price":p,"change":ch,"weekly":weekly,"currency":"NGN","name":x.get("name") or NGX_ASSETS[s],"source":"Kobo Terminal NGX API","timestamp":row_stamp,"timestamp_label":stamp_label,"stale":stale}
         return out,("STALE" if stale and out else "LIVE" if out else "EMPTY"),"Kobo Terminal NGX API"
     except Exception as exc:
-        return {},"ERROR","Kobo Terminal"
+        return {},f"ERROR: {exc}","Kobo Terminal"
 
 def ngx():
     out,mode,source=kobo_ngx()
