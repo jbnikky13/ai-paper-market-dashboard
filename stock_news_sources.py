@@ -131,6 +131,32 @@ def fetch_market_news(now=None, limit=80):
 
     all_items = []
     statuses = []
+    # Keep the existing Infera feed as a supplemental source rather than a
+    # single point of failure for the daily risk monitor.
+    try:
+        from business_news import fetch_infera_business_topic
+        infera_items, infera_meta = fetch_infera_business_topic(limit=limit)
+        for item in infera_items:
+            item = dict(item)
+            item["category"] = "infera"
+            item["provider"] = "Infera Business Topic"
+            item["source_verified"] = False
+            all_items.append(item)
+        statuses.append({
+            "provider": "Infera Business Topic",
+            "category": "infera",
+            "status": "ok" if infera_items else "empty",
+            "count": len(infera_items),
+            "error": infera_meta.get("error"),
+        })
+    except Exception as exc:
+        statuses.append({
+            "provider": "Infera Business Topic",
+            "category": "infera",
+            "status": "error",
+            "count": 0,
+            "error": str(exc)[:180],
+        })
     for provider, category, url in providers:
         try:
             items = _fetch_feed(url, provider, category, now)
@@ -152,7 +178,7 @@ def fetch_market_news(now=None, limit=80):
             })
 
     # Prefer direct publisher / official items over discovery duplicates.
-    priority = {"official": 0, "publisher": 1, "independent": 2}
+    priority = {"official": 0, "publisher": 1, "independent": 2, "infera": 3}
     all_items.sort(key=lambda x: (priority.get(x["category"], 9), -(x["published_at"].timestamp() if x["published_at"] else 0)))
     seen = set()
     unique = []
