@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote
 import xml.etree.ElementTree as ET
+import re
 
 import requests
 
@@ -83,6 +84,17 @@ def _is_official(url):
     return any(host == domain or host.endswith("." + domain) for domain in OFFICIAL_DOMAINS)
 
 
+def _valid_headline(title):
+    """Reject empty or generic search-index placeholders, not real headlines."""
+    cleaned = " ".join(str(title or "").split())
+    lowered = cleaned.lower()
+    if len(cleaned) < 8 or lowered.startswith(("untitled", "- ", "newsroom")):
+        return False
+    if re.fullmatch(r"[\W_]+", cleaned):
+        return False
+    return True
+
+
 def _items_from_feed(xml_text, provider, category, now):
     root = ET.fromstring(xml_text)
     items = []
@@ -94,7 +106,7 @@ def _items_from_feed(xml_text, provider, category, now):
         source_node = node.find("source")
         source_name = (source_node.text or "").strip() if source_node is not None else ""
         source_url = source_node.attrib.get("url", "") if source_node is not None else ""
-        if not title or not link:
+        if not _valid_headline(title) or not link:
             continue
         if published and (published > now + timedelta(hours=2) or published < now - timedelta(days=MAX_AGE_DAYS)):
             continue
