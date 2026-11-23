@@ -1,7 +1,8 @@
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 
-from stock_news_sources import _items_from_feed, _is_official, _parse_date
+from stock_news_sources import _items_from_feed, _is_official, _parse_date, fetch_market_news
 
 
 class StockNewsSourceTests(unittest.TestCase):
@@ -55,6 +56,32 @@ class StockNewsSourceTests(unittest.TestCase):
     def test_unparseable_date_is_retained_with_missing_timestamp(self):
         self.assertIsNone(_parse_date("not a date"))
 
+
+    def test_infera_api_shape_is_normalized_and_sorted_without_key_error(self):
+        # Mirrors business_news._normalise_topic_story output: publishedAt is
+        # an ISO string and there is intentionally no published_at key.
+        infera_story = {
+            "title": "MTN Nigeria announces network investment",
+            "url": "https://infera-ten.vercel.app/story/abc123",
+            "description": "Investment update",
+            "publishedAt": "2026-11-23T11:30:00.000Z",
+            "source": "Infera",
+            "region": "Nigeria",
+            "relevance": 80,
+            "momentum": 0,
+            "importance": 0,
+        }
+        import business_news
+        with patch.object(business_news, "fetch_infera_business_topic",
+                          return_value=([infera_story], {"error": None, "count": 1})), \\
+             patch("stock_news_sources._fetch_feed", return_value=[]):
+            stories, meta = fetch_market_news(now=self.now)
+
+        self.assertEqual(len(stories), 1)
+        self.assertEqual(stories[0]["category"], "infera")
+        self.assertEqual(stories[0]["published_at"], datetime(2026, 11, 23, 11, 30, tzinfo=timezone.utc))
+        self.assertEqual(meta["count"], 1)
+        self.assertEqual(meta["providers"][0]["status"], "ok")
 
 if __name__ == "__main__":
     unittest.main()
