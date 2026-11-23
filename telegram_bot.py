@@ -122,7 +122,7 @@ def market_lines():
         chs="N/A" if ch is None else f"{ch:+.2f}%";icon="🟢" if (ch or 0)>0 else ("🔴" if (ch or 0)<0 else "🟡");lines.append(f"{icon} <b>{html.escape(n)}</b> ({s}) — {money(p,cur)} ({chs}) • {mkt} • {src}")
     lines += ["",f"🇳🇬 <b>NGX DATA: {mode}</b>"]
     if mode=="NO_KEY":lines.append("<i>Kobo Terminal API key is not configured; NGX prices are withheld.</i>")
-    elif mode in ("UNAVAILABLE","ERROR","EMPTY","STALE"):lines.append("<i>Kobo Terminal data is unavailable, empty or stale; NGX prices are withheld rather than replaced with unverified Yahoo symbols.</i>")
+    elif mode in ("UNAVAILABLE","ERROR","EMPTY","STALE") or str(mode).startswith("ERROR"):lines.append("<i>Kobo Terminal data is unavailable, empty or stale; NGX prices are withheld rather than replaced with unverified Yahoo symbols.</i>")
     return lines
 
 def split_html(text,limit=3500):
