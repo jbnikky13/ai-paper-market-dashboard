@@ -1,6 +1,7 @@
 name: Validate Telegram Reporting
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "**.py"
@@ -13,7 +14,7 @@ permissions:
 jobs:
   python-validation:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -25,3 +26,10 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Compile all Python modules
         run: python -m compileall -q .
+      - name: Run stock news source and report-capture tests
+        run: python -m unittest discover -s tests -v
+      - name: Inspect live news feeds and print Telegram preview (no delivery)
+        env:
+          KOBO_API_KEY: ${{ secrets.KOBO_API_KEY }}
+          NGXPULSE_API_KEY: ${{ secrets.NGXPULSE_API_KEY }}
+        run: python scripts/preview_stock_risk_report.py
