@@ -178,6 +178,7 @@ def build_report(now=None):
                     if kobo_status == "EMPTY"
                     else "Kobo Terminal quote snapshot is stale"
                     if kobo_status == "STALE"
+                    else kobo_status if str(kobo_status).startswith("ERROR")
                     else "Kobo Terminal request failed"
                 )
         else:
