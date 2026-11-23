@@ -22,6 +22,11 @@ class StockRiskReportCaptureTests(unittest.TestCase):
         self.assertTrue(stock_risk_monitor._matches_news(tip_story, tip))
         self.assertFalse(stock_risk_monitor._matches_news(tip_story, gtco))
 
+    def test_large_upward_move_is_separate_from_downside_risk(self):
+        item = {"daily": 31.65, "weekly": 5.84, "news": []}
+        self.assertEqual(stock_risk_monitor._risk(item, []), "LOW")
+        self.assertTrue(abs(item["daily"]) >= 10)
+
     def test_build_report_captures_telegram_html_without_sending(self):
         now = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
         story = {
