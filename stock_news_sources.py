@@ -116,6 +116,7 @@ def _items_from_feed(xml_text, provider, category, now):
             "publishedAt": published.isoformat() if published else "",
             "published_at": published,
             "source": publisher,
+            "publisher_domain": _host(source_url) if source_url else _host(link),
             "provider": provider,
             "category": category,
             "source_verified": category == "official",
@@ -129,7 +130,7 @@ def _fetch_feed(url, provider, category, now, timeout=TIMEOUT):
     return _items_from_feed(response.text, provider, category, now)
 
 
-def fetch_market_news(now=None, limit=80):
+def fetch_market_news(now=None, limit=250):
     """Return deduplicated, recent stories and per-provider health metadata."""
     now = now or datetime.now(timezone.utc)
     providers = [
