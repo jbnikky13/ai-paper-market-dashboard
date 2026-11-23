@@ -71,7 +71,7 @@ class StockNewsSourceTests(unittest.TestCase):
 
     def test_nigerian_issuer_queries_are_added_to_live_discovery(self):
         import stock_news_sources
-        with patch.object(stock_news_sources, "_fetch_feed", return_value=[]) as fetch_mock, \\
+        with patch.object(stock_news_sources, "_fetch_feed", return_value=[]) as fetch_mock, \
              patch("business_news.fetch_infera_business_topic", return_value=([], {"error": None, "count": 0})):
             fetch_market_news(now=self.now)
         requested_urls = " ".join(call.args[0] for call in fetch_mock.call_args_list)
