@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 import requests
 
-from business_news import fetch_infera_business_topic
+from stock_news_sources import fetch_market_news
 from telegram_bot import send, split_html, kobo_ngx
 
 UA = {"User-Agent": "AI-Market-Intelligence-Risk-Monitor/1.0"}
@@ -86,9 +86,8 @@ def _get_history(symbol):
         return None, str(exc)
 
 
-def _news_for_watchlist(limit=60):
-    stories, meta = fetch_infera_business_topic(limit=limit)
-    return stories, meta
+def _news_for_watchlist(limit=80):
+    return fetch_market_news(limit=limit)
 
 
 def _matches_news(story, item):
@@ -115,9 +114,23 @@ def _risk(item, stories):
     )
     if high_news or (daily is not None and daily <= -5) or (weekly is not None and weekly <= -10):
         return "HIGH"
-    if (daily is not None and daily <= -3) or (weekly is not None and weekly <= -5) or related:
+    if (daily is not None and daily <= -3) or (weekly is not None and weekly <= -5):
         return "MODERATE"
+    if daily is None and weekly is None and not related:
+        return "UNKNOWN"
     return "LOW"
+
+
+def _data_confidence(item, news_meta):
+    price_coverage = "available" if item.get("price") is not None else "missing"
+    history_coverage = "complete" if item.get("daily") is not None and item.get("weekly") is not None else "partial"
+    providers = news_meta.get("providers", [])
+    successful = sum(1 for p in providers if p.get("status") == "ok")
+    if price_coverage == "missing" or successful == 0:
+        return "LOW", price_coverage, history_coverage
+    if history_coverage == "partial" or successful < len(providers):
+        return "MEDIUM", price_coverage, history_coverage
+    return "HIGH", price_coverage, history_coverage
 
 
 def build_report(now=None):
@@ -152,7 +165,12 @@ def build_report(now=None):
             quote_data["news"] = [s for s in stories if _matches_news(s, item)][:4]
             quote_data["risk"] = _risk(quote_data, stories)
         else:
-            quote_data = {"news": [s for s in stories if _matches_news(s, item)][:4], "risk": "DATA UNAVAILABLE", "error": error}
+            quote_data = {"news": [s for s in stories if _matches_news(s, item)][:4], "risk": "UNKNOWN", "error": error}
+        confidence, price_coverage, history_coverage = _data_confidence(quote_data, news_meta)
+        quote_data["data_confidence"] = confidence
+        quote_data["price_coverage"] = price_coverage
+        quote_data["history_coverage"] = history_coverage
+        quote_data["unusual_move"] = bool(quote_data.get("daily") is not None and abs(quote_data["daily"]) >= 10)
         results.append((item, quote_data))
         if quote_data.get("price") is None:
             lines.append(f"⚪ <b>{html.escape(item['name'])} ({item['symbol']})</b> — price unavailable")
@@ -168,16 +186,19 @@ def build_report(now=None):
                 f"{icon} <b>{html.escape(item['name'])} ({item['symbol']})</b> — "
                 f"{_money(quote_data['price'], quote_data['currency'])}"
             )
-            lines.append(f"  Daily: {daily_text} • 5-session: {weekly_text} • Risk: <b>{quote_data['risk']}</b>")
+            unusual = " • ⚡ UNUSUAL MOVE" if quote_data.get("unusual_move") else ""
+            lines.append(f"  Daily: {daily_text} • 5-session: {weekly_text} • Downside risk: <b>{quote_data['risk']}</b>{unusual}")
+            lines.append(f"  Data confidence: <b>{confidence}</b> • Price: {price_coverage} • History: {history_coverage}")
             lines.append(f"  <i>Quote timestamp: {stamp} • {html.escape(quote_data['source'])}</i>")
         if quote_data.get("news"):
             for story in quote_data["news"][:2]:
                 title = html.escape(str(story.get("title", "Untitled"))[:220])
                 url = html.escape(str(story.get("url", "")), quote=True)
-                source = html.escape(str(story.get("source", "Infera")))
-                lines.append(f'  • <a href="{url}">{title}</a> <i>({source})</i>')
+                source = html.escape(str(story.get("source", story.get("provider", "Unknown"))))
+                category = html.escape(str(story.get("category", "news")).upper())
+                lines.append(f'  • <a href="{url}">{title}</a> <i>({source} • {category})</i>')
         elif quote_data.get("price") is not None:
-            lines.append("  <i>No matching material headline found in the current Infera business feed.</i>")
+            lines.append("  <i>No matching recent headline found in configured feeds; this is not proof that no risk exists.</i>")
         lines.append("")
     lines += [
         "<b>ALERT RULES</b>",
@@ -188,9 +209,13 @@ def build_report(now=None):
         "",
         "<b>DATA LIMITATIONS</b>",
         "• Quotes are daily-bar data and may be delayed or stale; each timestamp is shown separately.",
-        "• News is drawn from the Infera Business Topic feed; absence of a headline does not prove absence of risk.",
-        "• Valuation is not scored in this first version because a consistent, timestamped valuation feed is not configured.",
-        f"<i>News feed: {html.escape(str(news_meta.get('provider', 'Infera Business Topic')))} • status: {html.escape(str(news_meta.get('status', 'unknown')))}</i>",
+        "• News: Nairametrics publisher RSS; Reuters headlines via Google News RSS; official issuer, NGX and SEC Nigeria domain-filtered discovery.",
+        "• Reuters has no working public RSS feed; Google News is the discovery transport, not the publisher.",
+        "• Official discovery depends on indexing and is not a complete filing feed.",
+        "• No matching headline does not prove no risk; provider errors and empty feeds are shown below.",
+        "• Valuation is not scored until a consistent, timestamped valuation feed is configured.",
+        f"<i>News: {html.escape(str(news_meta.get('provider', 'Unknown')))} • status: {html.escape(str(news_meta.get('status', 'unknown')))} • usable stories: {news_meta.get('count', 0)}</i>",
+        *[f"  • {html.escape(p.get('provider', 'provider'))}: {html.escape(p.get('status', 'unknown'))} ({p.get('count', 0)} stories)" for p in news_meta.get('providers', [])],
         "",
         "<i>Research and monitoring only. Not investment advice or a prediction of exact price bottoms.</i>",
     ]
