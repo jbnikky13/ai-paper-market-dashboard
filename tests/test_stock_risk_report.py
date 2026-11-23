@@ -29,6 +29,7 @@ class StockRiskReportCaptureTests(unittest.TestCase):
         issuer_filing = {
             "title": "Seplat Energy announces notification of dealing in shares",
             "description": "Nigerian Exchange Group company announcement",
+            "category": "official",
         }
         self.assertFalse(stock_risk_monitor._is_market_context(issuer_filing))
 
