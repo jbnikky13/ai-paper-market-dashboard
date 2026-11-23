@@ -18,15 +18,19 @@ UA = {"User-Agent": "AI-Market-Intelligence-Risk-Monitor/2.0"}
 TIMEOUT = 20
 MAX_AGE_DAYS = 7
 WATCH_TERMS = (
-    "NVIDIA OR NVDA",
+    '"NVIDIA" OR NVDA',
     '"MTN Nigeria" OR MTNN',
-    '"The Initiates Plc" OR TIP Nigeria',
-    'GTCO OR "Guaranty Trust"',
-    '"Dangote Cement" OR DANGCEM',
+    '"The Initiates Plc" OR "The Initiates" Nigeria',
+    '"GTCO" OR "Guaranty Trust Holding Company" OR GTBank Nigeria',
+    '"Dangote Cement" OR DANGCEM Nigeria',
 )
-MACRO_TERMS = (
-    'Nigeria CBN inflation naira interest rates',
-    'Federal Reserve US technology semiconductor export controls',
+# Broad Nigerian business-news discovery supplements Reuters and the official
+# issuer feeds, particularly for smaller NGX names with limited wire coverage.
+NIGERIAN_ISSUER_QUERIES = (
+    '"MTN Nigeria" (results OR shares OR investment OR subscribers OR NGX)',
+    '"The Initiates Plc" OR "The Initiates" Nigeria',
+    '"GTCO" OR "Guaranty Trust Holding Company" Nigeria',
+    '"Dangote Cement" (results OR shares OR production OR investment) Nigeria',
 )
 
 # Only these domains qualify as official issuer, exchange or regulator evidence.
@@ -148,8 +152,10 @@ def fetch_market_news(now=None, limit=250):
     providers = [
         ("Nairametrics", "publisher", "https://nairametrics.com/feed"),
     ]
-    for term in WATCH_TERMS + MACRO_TERMS:
+    for term in WATCH_TERMS:
         providers.append(("Reuters via Google News", "independent", _google_feed(f"site:reuters.com {term} when:7d")))
+    for term in NIGERIAN_ISSUER_QUERIES:
+        providers.append(("Nigerian issuer news discovery", "issuer_news", _google_feed(f"{term} when:7d")))
     official_queries = (
         'site:ngxgroup.com OR site:doclib.ngxgroup.com "company announcement" Nigeria',
         'site:sec.gov.ng Nigeria issuer filing company announcement',
@@ -211,7 +217,7 @@ def fetch_market_news(now=None, limit=250):
             })
 
     # Prefer direct publisher / official items over discovery duplicates.
-    priority = {"official": 0, "publisher": 1, "independent": 2, "infera": 3}
+    priority = {"official": 0, "publisher": 1, "issuer_news": 2, "independent": 3, "infera": 4}
     all_items.sort(key=lambda x: (priority.get(x["category"], 9), -(_normalise_story_timestamp(x).timestamp() if _normalise_story_timestamp(x) else 0)))
     seen = set()
     unique = []
