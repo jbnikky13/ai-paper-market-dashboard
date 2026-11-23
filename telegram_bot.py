@@ -8,7 +8,7 @@ CHANNEL=os.getenv("TELEGRAM_CHANNEL_ID","").strip()
 KOBO_KEY=(os.getenv("KOBO_API_KEY","").strip() or os.getenv("NGXPULSE_API_KEY","").strip())
 CG_KEY=os.getenv("COINGECKO_DEMO_API_KEY","").strip()
 GNEWS_KEY=os.getenv("GNEWS_API_KEY","").strip()
-VERSION="v6.2.2"
+VERSION="v6.2.3"
 CG="https://api.coingecko.com/api/v3"; YAHOO="https://query1.finance.yahoo.com/v8/finance/chart"; KOBO="https://koboterminal.com/api"
 CRYPTO={"bitcoin":"BTC","ethereum":"ETH","solana":"SOL","binancecoin":"BNB","ripple":"XRP","dogecoin":"DOGE","chainlink":"LINK","avalanche-2":"AVAX"}
 US={"NVDA":"NVIDIA","AMD":"AMD","AVGO":"Broadcom","MSFT":"Microsoft","GOOGL":"Alphabet","AMZN":"Amazon","META":"Meta","TSLA":"Tesla","AAPL":"Apple","QQQ":"Nasdaq-100 ETF","SPY":"S&P 500 ETF"}
@@ -47,34 +47,58 @@ def kobo_request(path,timeout=20):
     if not KOBO_KEY:return None,"NO_KEY"
     return req(f"{KOBO}{path}",headers={"X-API-Key":KOBO_KEY,"Content-Type":"application/json","User-Agent":f"AI-Market-Intelligence/{VERSION}"},timeout=timeout)
 
+def _kobo_datetime(value):
+    if not value:return None
+    try:
+        parsed=datetime.fromisoformat(str(value).replace("Z","+00:00"))
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    except (TypeError,ValueError,OverflowError):
+        return None
+
 def kobo_ngx():
+    """Fetch the documented all-stocks payload and preserve source freshness metadata."""
     if not KOBO_KEY:return {},"NO_KEY","Kobo Terminal"
     r,e=kobo_request("/ngxdata/stocks",20)
     if not r:return {},"ERROR","Kobo Terminal"
     try:
-        body=r.json();rows=body if isinstance(body,list) else (body.get("data") or body.get("stocks") or [])
+        body=r.json()
+        if isinstance(body,list):
+            rows=body;as_of=None;stale_after=None
+        elif isinstance(body,dict):
+            rows=body.get("stocks") or body.get("data") or []
+            if isinstance(rows,dict):rows=rows.get("stocks") or rows.get("data") or []
+            as_of=_kobo_datetime(body.get("as_of"))
+            stale_after=_kobo_datetime(body.get("stale_after"))
+        else:
+            return {},"ERROR","Kobo Terminal"
+        if not isinstance(rows,list):return {},"ERROR","Kobo Terminal"
+        stale=bool(stale_after and stale_after < datetime.now(timezone.utc))
         out={}
         for x in rows:
             if not isinstance(x,dict):continue
-            s=str(x.get("symbol") or x.get("ticker") or "").upper().strip();price=x.get("current_price")
+            s=str(x.get("symbol") or x.get("ticker") or "").upper().strip()
+            price=x.get("current_price")
             if s not in NGX_ASSETS or price is None:continue
             try:p=float(price)
             except (TypeError,ValueError):continue
-            try:ch=float(x.get("change_percent")) if x.get("change_percent") is not None else None
+            try:ch=float(x.get("change_percent",x.get("official_change_percent"))) if x.get("change_percent",x.get("official_change_percent")) is not None else None
             except (TypeError,ValueError):ch=None
-            out[s]={"price":p,"change":ch,"currency":"NGN","name":x.get("name") or NGX_ASSETS[s],"source":"Kobo Terminal"}
-        return out,"LIVE" if out else "EMPTY","Kobo Terminal"
-    except Exception:return {},"ERROR","Kobo Terminal"
+            try:weekly=float(x.get("pct_change_7d")) if x.get("pct_change_7d") is not None else None
+            except (TypeError,ValueError):weekly=None
+            trade_date=x.get("trade_date")
+            row_stamp=_kobo_datetime(trade_date) or as_of
+            stamp_label=f"as of {as_of.strftime('%Y-%m-%d %H:%M UTC')}" if as_of else "provider timestamp unavailable"
+            if trade_date:stamp_label+=f" • trade date {str(trade_date)[:10]}"
+            out[s]={"price":p,"change":ch,"weekly":weekly,"currency":"NGN","name":x.get("name") or NGX_ASSETS[s],"source":"Kobo Terminal NGX API","timestamp":row_stamp,"timestamp_label":stamp_label,"stale":stale}
+        return out,("STALE" if stale and out else "LIVE" if out else "EMPTY"),"Kobo Terminal NGX API"
+    except Exception as exc:
+        return {},"ERROR","Kobo Terminal"
 
 def ngx():
     out,mode,source=kobo_ngx()
-    if out:return out,mode,source
-    yf={}
-    for s,n in NGX_ASSETS.items():
-        x,_=yahoo(f"{s}.LG")
-        if x and x.get("price") is not None:
-            x["name"]=n;x["currency"]="NGN";x["source"]="Yahoo Finance fallback";yf[s]=x
-    return yf,"YAHOO_FALLBACK" if yf else "UNAVAILABLE","Yahoo Finance" if yf else "None"
+    if out and mode=="LIVE":return out,mode,source
+    # Do not fall back to the known-invalid Yahoo .LG symbols.
+    return {},mode,source
 
 def money(price,currency):return f"{'$' if currency=='USD' else '₦' if currency=='NGN' else currency+' '}{price:,.2f}"
 
@@ -97,8 +121,8 @@ def market_lines():
     for s,n,p,ch,cur,src,mkt in stocks:
         chs="N/A" if ch is None else f"{ch:+.2f}%";icon="🟢" if (ch or 0)>0 else ("🔴" if (ch or 0)<0 else "🟡");lines.append(f"{icon} <b>{html.escape(n)}</b> ({s}) — {money(p,cur)} ({chs}) • {mkt} • {src}")
     lines += ["",f"🇳🇬 <b>NGX DATA: {mode}</b>"]
-    if mode=="NO_KEY":lines.append("<i>Kobo Terminal API key is not configured; Yahoo Finance fallback used where available.</i>")
-    elif mode in ("UNAVAILABLE","ERROR","EMPTY"):lines.append("<i>Kobo Terminal data unavailable; Yahoo Finance fallback used where available. No prices are fabricated.</i>")
+    if mode=="NO_KEY":lines.append("<i>Kobo Terminal API key is not configured; NGX prices are withheld.</i>")
+    elif mode in ("UNAVAILABLE","ERROR","EMPTY","STALE"):lines.append("<i>Kobo Terminal data is unavailable, empty or stale; NGX prices are withheld rather than replaced with unverified Yahoo symbols.</i>")
     return lines
 
 def split_html(text,limit=3500):
@@ -139,11 +163,9 @@ def send(messages, attempts=4):
         time.sleep(1.2)
     return True,f"Telegram sent successfully in {len(messages)} message(s)."
 
-
 if __name__=="__main__":
     market=market_lines();global_news,_=fetch_market_news(GNEWS_KEY,8);messages=[]
     for section in ["\n".join(market),render_global_telegram(global_news,8)]:messages.extend(split_html(section))
     ok,result=send(messages);print(result)
     if not ok:raise SystemExit(1)
-    # Only suppress these stories after every Telegram message was accepted.
     save_seen(global_news)
