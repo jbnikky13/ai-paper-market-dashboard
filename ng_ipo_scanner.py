@@ -70,4 +70,4 @@ def telegram_text(x):
         f"<b>Verification:</b> {html.escape(str(x.get('verification','N/A')))}",
         f"<b>Source:</b> {html.escape(x.get('source_url',x.get('url','')))}",
     ]
-    return '\\n'.join(lines)
+    return '\n'.join(lines)
