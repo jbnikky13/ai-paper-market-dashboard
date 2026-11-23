@@ -112,8 +112,12 @@ def _matches_news(story, item):
 
 
 def _is_market_context(story):
-    """Keep only stories with both a concrete market signal and market geography."""
-    text = " ".join(f"{story.get('title', '')} {story.get('description', '')}".lower().split())
+    """Keep only broad-market headlines, never individual issuer filings."""
+    if story.get("category") == "official":
+        return False
+    # Use headline text only; article descriptions and publisher suffixes can
+    # make an issuer filing look like broad market coverage.
+    text = " ".join(str(story.get("title", "")).lower().split())
     has_market_signal = any(term in text for term in MARKET_CONTEXT_TERMS)
     has_market_geography = any(term in text for term in MARKET_GEO_TERMS)
     return has_market_signal and has_market_geography
