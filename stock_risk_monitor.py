@@ -24,17 +24,21 @@ WATCHLIST = [
 ]
 ALIASES = {
     "NVDA": ("nvidia", "nvda", "jensen huang"),
-    "MTNN": ("mtn nigeria", "mtn group", "mt n nigeria", "mt n", "mtnn"),
-    "TIP": ("the initiates", "tip plc", "initiates plc"),
-    "GTCO": ("gtco", "guaranty trust", "gtbank", "guaranty trust holding"),
+    "MTNN": ("mtn nigeria", "mtn nigeria plc", "mtnn"),
+    "TIP": ("the initiates plc", "the initiates", "initiates plc"),
+    "GTCO": ("gtco", "guaranty trust holding company", "guaranty trust", "gtbank"),
     "DANGCEM": ("dangote cement", "dangote cement plc", "dangcem"),
 }
-MACRO_TERMS = (
-    "central bank", "cbn", "interest rate", "inflation", "naira", "foreign exchange",
-    "fx market", "exchange rate", "tariff", "export restriction", "fed decision",
-    "federal reserve", "oil price", "crude oil", "energy cost", "regulatory",
-    "regulation", "tax policy", "capital requirement", "telecom regulation",
+MARKET_CONTEXT_TERMS = (
+    "ngx", "nigerian exchange", "stock market", "equity market", "equities",
+    "shares", "share price", "capital market", "market sell-off", "market selloff",
+    "market rally", "market retreat", "market capitalization", "market capitalisation",
+    "investor sentiment", "foreign portfolio", "bond yield", "treasury bills",
+    "monetary policy", "interest rate", "inflation", "naira", "exchange rate",
+    "foreign exchange", "fx market", "crude oil", "oil price", "federal reserve",
+    "central bank", "cbn",
 )
+MARKET_GEO_TERMS = ("nigeria", "nigerian", "ngx", "naira", "cbn", "us market", "wall street", "federal reserve", "global markets")
 HIGH_IMPACT_TERMS = (
     "profit warning", "guidance cut", "dividend cut", "dividend suspended",
     "regulatory sanction", "investigation", "fraud", "default", "downgrade",
@@ -106,8 +110,11 @@ def _matches_news(story, item):
 
 
 def _is_market_context(story):
-    text = f"{story.get('title', '')} {story.get('description', '')}".lower()
-    return any(term in text for term in MACRO_TERMS)
+    """Keep only stories with both a concrete market signal and market geography."""
+    text = " ".join(f"{story.get('title', '')} {story.get('description', '')}".lower().split())
+    has_market_signal = any(term in text for term in MARKET_CONTEXT_TERMS)
+    has_market_geography = any(term in text for term in MARKET_GEO_TERMS)
+    return has_market_signal and has_market_geography
 
 
 def _money(value, currency):
