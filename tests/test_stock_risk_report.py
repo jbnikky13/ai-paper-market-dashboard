@@ -25,9 +25,9 @@ class StockRiskReportCaptureTests(unittest.TestCase):
             "price": 180.0, "currency": "USD", "daily": 1.25, "weekly": 2.5,
             "timestamp": now, "source": "Test fixture",
         }
-        with patch.object(stock_risk_monitor, "_news_for_watchlist", return_value=([story], meta)), \\
-             patch.object(stock_risk_monitor, "kobo_ngx", return_value=({}, "NO_KEY", "Kobo Terminal")), \\
-             patch.object(stock_risk_monitor, "_get_history", return_value=(dict(quote), None)), \\
+        with patch.object(stock_risk_monitor, "_news_for_watchlist", return_value=([story], meta)), \
+             patch.object(stock_risk_monitor, "kobo_ngx", return_value=({}, "NO_KEY", "Kobo Terminal")), \
+             patch.object(stock_risk_monitor, "_get_history", return_value=(dict(quote), None)), \
              patch.object(stock_risk_monitor, "send") as send_mock:
             lines, results = stock_risk_monitor.build_report(now=now)
             telegram_text = "\n".join(lines)
