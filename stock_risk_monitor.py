@@ -23,7 +23,7 @@ WATCHLIST = [
     {"symbol": "DANGCEM", "name": "Dangote Cement", "market": "NGX", "yahoo": None},
 ]
 ALIASES = {
-    "NVDA": ("nvidia", "nvda", "jensen huang", "ai chip"),
+    "NVDA": ("nvidia", "nvda", "jensen huang"),
     "MTNN": ("mtn nigeria", "mtn group", "mt n nigeria", "mt n", "mtnn"),
     "TIP": ("the initiates", "tip plc", "initiates plc"),
     "GTCO": ("gtco", "guaranty trust", "gtbank", "guaranty trust holding"),
