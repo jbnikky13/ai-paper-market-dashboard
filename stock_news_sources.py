@@ -19,10 +19,7 @@ TIMEOUT = 20
 MAX_AGE_DAYS = 7
 WATCH_TERMS = (
     '"NVIDIA" OR NVDA',
-    '"MTN Nigeria" OR MTNN',
-    '"The Initiates Plc" OR "The Initiates" Nigeria',
-    '"GTCO" OR "Guaranty Trust Holding Company" OR GTBank Nigeria',
-    '"Dangote Cement" OR DANGCEM Nigeria',
+    '"MTN Nigeria" OR "The Initiates Plc" OR GTCO OR "Guaranty Trust" OR "Dangote Cement" Nigeria',
 )
 # Broad Nigerian business-news discovery supplements Reuters and the official
 # issuer feeds, particularly for smaller NGX names with limited wire coverage.
