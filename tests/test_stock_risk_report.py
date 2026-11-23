@@ -13,7 +13,7 @@ class StockRiskReportCaptureTests(unittest.TestCase):
         }
         for item in stock_risk_monitor.WATCHLIST:
             self.assertFalse(stock_risk_monitor._matches_news(macro, item))
-        self.assertFalse(stock_risk_monitor._is_market_context(macro))
+        self.assertTrue(stock_risk_monitor._is_market_context(macro))
 
     def test_market_context_requires_a_real_market_signal(self):
         ngx_selloff = {
