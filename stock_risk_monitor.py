@@ -209,7 +209,7 @@ def build_report(now=None):
         "",
         "<b>DATA LIMITATIONS</b>",
         "• Quotes are daily-bar data and may be delayed or stale; each timestamp is shown separately.",
-        "• News: Nairametrics publisher RSS; Reuters headlines via Google News RSS; official issuer, NGX and SEC Nigeria domain-filtered discovery.",
+        "• News: Nairametrics publisher RSS; Reuters headlines via Google News RSS; official issuer, NGX and SEC Nigeria domain-filtered discovery; Infera retained as a supplemental feed.",
         "• Reuters has no working public RSS feed; Google News is the discovery transport, not the publisher.",
         "• Official discovery depends on indexing and is not a complete filing feed.",
         "• No matching headline does not prove no risk; provider errors and empty feeds are shown below.",
