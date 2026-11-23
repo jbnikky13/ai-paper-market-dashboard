@@ -28,19 +28,29 @@ def save_state(x):
 def scan():
     state = load_state()
     fresh = []
+    pending = set()
     for page in SOURCE_PAGES:
         for item in discover_links(page):
             key = f"{item.get('url','')}|{item.get('title','')}"
-            if state.get(key):
+            if state.get(key) or key in pending:
                 continue
             intelligence = analyze(item["url"])
+            # Failed downloads are not marked seen; they can be retried.
+            if not intelligence:
+                continue
             item["checked_at"] = datetime.now(timezone.utc).isoformat()
-            if intelligence:
-                item.update(intelligence)
-            state[key] = item["checked_at"]
+            item.update(intelligence)
+            pending.add(key)
             fresh.append(item)
-    save_state(state)
     return fresh
+
+
+def commit_delivered(items):
+    state = load_state()
+    for item in items:
+        key = f"{item.get('url','')}|{item.get('title','')}"
+        state[key] = item.get("checked_at") or datetime.now(timezone.utc).isoformat()
+    save_state(state)
 
 
 def telegram_text(x):
