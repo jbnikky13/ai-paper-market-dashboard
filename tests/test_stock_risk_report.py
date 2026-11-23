@@ -26,6 +26,11 @@ class StockRiskReportCaptureTests(unittest.TestCase):
         }
         self.assertTrue(stock_risk_monitor._is_market_context(ngx_selloff))
         self.assertFalse(stock_risk_monitor._is_market_context(unrelated_policy))
+        issuer_filing = {
+            "title": "Seplat Energy announces notification of dealing in shares",
+            "description": "Nigerian Exchange Group company announcement",
+        }
+        self.assertFalse(stock_risk_monitor._is_market_context(issuer_filing))
 
     def test_issuer_headlines_match_only_the_named_company(self):
         tip_story = {"title": "The Initiates Plc announces audited results", "description": ""}
