@@ -1,0 +1,45 @@
+name: Daily Stock Risk Monitoring Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 22:30 UTC / 23:30 WAT: after the normal NGX and US cash sessions.
+    - cron: "30 22 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "stock_risk_monitor.py"
+      - "telegram_bot.py"
+      - "business_news.py"
+      - ".github/workflows/stock-risk-monitor.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-stock-risk-monitor
+  cancel-in-progress: false
+
+jobs:
+  daily-risk-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      KOBO_API_KEY: ${{ secrets.KOBO_API_KEY }}
+      NGXPULSE_API_KEY: ${{ secrets.NGXPULSE_API_KEY }}
+      INFERA_URL: https://infera-ten.vercel.app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Send daily downside-risk report to existing Telegram channel
+        run: python stock_risk_monitor.py
