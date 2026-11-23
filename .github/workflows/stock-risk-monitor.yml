@@ -11,6 +11,8 @@ on:
       - "stock_risk_monitor.py"
       - "telegram_bot.py"
       - "business_news.py"
+      - "stock_news_sources.py"
+      - "tests/**"
       - ".github/workflows/stock-risk-monitor.yml"
 
 permissions:
@@ -41,5 +43,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+      - name: Run stock-monitor tests
+        run: python -m unittest discover -s tests -v
       - name: Send daily downside-risk report to existing Telegram channel
         run: python stock_risk_monitor.py
