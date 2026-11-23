@@ -64,6 +64,7 @@ class KoboNGXTests(unittest.TestCase):
         self.assertEqual(rows["GTCO"]["price"], 116.0)
         self.assertEqual(rows["GTCO"]["change"], -0.85)
         self.assertEqual(rows["GTCO"]["weekly"], -2.93)
+        self.assertEqual(rows["GTCO"]["weekly_label"], "7-day")
         self.assertEqual(rows["GTCO"]["timestamp"], datetime(2026, 11, 23, 0, 0, tzinfo=timezone.utc))
         self.assertIn("2026-11-23 16:00 UTC", rows["GTCO"]["timestamp_label"])
         self.assertFalse(rows["GTCO"]["stale"])
