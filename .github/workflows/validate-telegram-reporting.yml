@@ -13,7 +13,7 @@ permissions:
 jobs:
   python-validation:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -25,5 +25,7 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Compile all Python modules
         run: python -m compileall -q .
-      - name: Run stock news source tests
+      - name: Run stock news source and report-capture tests
         run: python -m unittest discover -s tests -v
+      - name: Inspect live news feeds and print Telegram preview (no delivery)
+        run: python scripts/preview_stock_risk_report.py
