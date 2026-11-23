@@ -69,6 +69,17 @@ class StockNewsSourceTests(unittest.TestCase):
         self.assertIsNone(_parse_date("not a date"))
 
 
+    def test_nigerian_issuer_queries_are_added_to_live_discovery(self):
+        import stock_news_sources
+        with patch.object(stock_news_sources, "_fetch_feed", return_value=[]) as fetch_mock, \\
+             patch("business_news.fetch_infera_business_topic", return_value=([], {"error": None, "count": 0})):
+            fetch_market_news(now=self.now)
+        requested_urls = " ".join(call.args[0] for call in fetch_mock.call_args_list)
+        self.assertIn("The%20Initiates", requested_urls)
+        self.assertIn("MTN%20Nigeria", requested_urls)
+        self.assertIn("Guaranty%20Trust", requested_urls)
+        self.assertIn("Dangote%20Cement", requested_urls)
+
     def test_infera_api_shape_is_normalized_and_sorted_without_key_error(self):
         # Mirrors business_news._normalise_topic_story output: publishedAt is
         # an ISO string and there is intentionally no published_at key.
