@@ -30,7 +30,7 @@ ALIASES = {
     "DANGCEM": ("dangote cement", "dangote cement plc", "dangcem"),
 }
 MARKET_CONTEXT_TERMS = (
-    "ngx", "nigerian exchange", "stock market", "equity market", "equities",
+    "ngx sell-off", "ngx selloff", "stock market", "equity market", "equities",
     "shares", "share price", "capital market", "market sell-off", "market selloff",
     "market rally", "market retreat", "market capitalization", "market capitalisation",
     "investor sentiment", "foreign portfolio", "bond yield", "treasury bills",
@@ -96,7 +96,9 @@ def _news_for_watchlist(limit=250):
 
 def _matches_news(story, item):
     """Match issuer-specific evidence only; broad macro news is reported separately."""
-    text = " ".join(f"{story.get('title', '')} {story.get('description', '')}".lower().split())
+    # Use the headline, not the full article description: publisher boilerplate
+    # can mention Nigeria/markets even when the story itself is unrelated.
+    text = " ".join(str(story.get("title", "")).lower().split())
     for alias in ALIASES[item["symbol"]]:
         # Phrase aliases use literal matching; ticker-like aliases require token
         # boundaries so short symbols such as TIP do not match ordinary words.
