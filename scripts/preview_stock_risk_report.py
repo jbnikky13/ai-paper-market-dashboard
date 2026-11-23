@@ -50,6 +50,7 @@ def main():
 
     # Reuse the just-fetched stories; build_report formats but does not send.
     stock_risk_monitor._news_for_watchlist = lambda limit=250: (stories[:limit], meta)
+    stock_risk_monitor.kobo_ngx = lambda: (ngx_rows, ngx_status, ngx_source)
     lines, results = stock_risk_monitor.build_report(now=now)
     print("\n=== TELEGRAM REPORT PREVIEW (NOT SENT) ===")
     print("\n".join(lines))
