@@ -167,6 +167,7 @@ def build_report(now=None):
                     "currency": "NGN",
                     "daily": fallback.get("change"),
                     "weekly": fallback.get("weekly"),
+                    "weekly_label": "7-day",
                     "timestamp": fallback.get("timestamp") or now,
                     "timestamp_label": fallback.get("timestamp_label") or "provider timestamp unavailable",
                     "source": fallback.get("source", kobo_source),
@@ -202,6 +203,7 @@ def build_report(now=None):
             weekly = quote_data.get("weekly")
             daily_text = "N/A" if daily is None else f"{daily:+.2f}%"
             weekly_text = "N/A" if weekly is None else f"{weekly:+.2f}%"
+            weekly_label = quote_data.get("weekly_label", "5-session")
             icon = "🔴" if quote_data["risk"] == "HIGH" else "🟠" if quote_data["risk"] == "MODERATE" else "🟢"
             stamp = quote_data.get("timestamp_label") or quote_data["timestamp"].strftime("%Y-%m-%d %H:%M UTC")
             lines.append(
@@ -209,7 +211,7 @@ def build_report(now=None):
                 f"{_money(quote_data['price'], quote_data['currency'])}"
             )
             unusual = " • ⚡ UNUSUAL MOVE" if quote_data.get("unusual_move") else ""
-            lines.append(f"  Daily: {daily_text} • 5-session: {weekly_text} • Downside risk: <b>{quote_data['risk']}</b>{unusual}")
+            lines.append(f"  Daily: {daily_text} • {weekly_label}: {weekly_text} • Downside risk: <b>{quote_data['risk']}</b>{unusual}")
             lines.append(f"  Data confidence: <b>{confidence}</b> • Price: {price_coverage} • History: {history_coverage}")
             lines.append(f"  <i>Quote timestamp: {stamp} • {html.escape(quote_data['source'])}</i>")
         if quote_data.get("news"):
@@ -235,7 +237,7 @@ def build_report(now=None):
     lines += [
         "<b>ALERT RULES</b>",
         "• Daily decline ≥3%: price-weakness flag.",
-        "• Five-session decline ≥5%: weekly weakness flag.",
+        "• 5-session (US) / 7-day (NGX) decline ≥5%: weekly weakness flag.",
         "• High-impact company headline: elevated review flag.\n        • Unusual moves of either direction receive a separate event-review flag.",
         "• Thresholds trigger review, not an automatic sell signal.\n        • An unusual upward move is not, by itself, a downside-risk signal.",
         "",
